@@ -1,0 +1,8 @@
+{
+  // Open the folder in WSL ("WSL: Open Folder in WSL"), then install these in WSL.
+  "recommendations": [
+    "ms-vscode-remote.remote-wsl",
+    "ms-vscode.cpptools",
+    "ms-azuretools.vscode-containers"
+  ]
+}

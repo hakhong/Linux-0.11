@@ -1,0 +1,56 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-main",
+      "type": "shell",
+      "command": "bash ${workspaceFolder}/build.sh main",
+      "group": "build"
+    },
+    {
+      "label": "build-boot",
+      "type": "shell",
+      "command": "bash ${workspaceFolder}/build.sh boot",
+      "group": "build"
+    },
+    {
+      "label": "qemu-stop",
+      "type": "shell",
+      "command": "pkill -f '^qemu-system-i386' || true"
+    },
+    {
+      "label": "qemu-debug-main",
+      "type": "shell",
+      "command": "rm -f ${workspaceFolder}/.gdbinit && bash ${workspaceFolder}/scripts/qemu-debug.sh main",
+      "dependsOn": "build-main",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^$",
+          "endsPattern": "QEMU gdbstub ready"
+        }
+      }
+    },
+    {
+      "label": "qemu-debug-boot",
+      "type": "shell",
+      "command": "cat > ${workspaceFolder}/.gdbinit << 'EOF'\nset confirm off\nset architecture i8086\ntarget remote localhost:1234\nhbreak *0x7c00\nEOF\nbash ${workspaceFolder}/scripts/qemu-debug.sh boot",
+      "dependsOn": "build-boot",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^$",
+          "endsPattern": "QEMU gdbstub ready"
+        }
+      }
+    }
+  ]
+}

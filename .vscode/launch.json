@@ -1,0 +1,94 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Linux 0.11 - main (QEMU + gdb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/system",
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "miDebuggerServerAddress": "localhost:1234",
+      "sourceFileMap": {
+        "/build": "${workspaceFolder}"
+      },
+      "stopAtEntry": false,
+      "preLaunchTask": "qemu-debug-main",
+      "postDebugTask": "qemu-stop",
+      "setupCommands": [
+        {
+          "text": "set architecture i386",
+          "ignoreFailures": true
+        },
+        {
+          "text": "set disassembly-flavor intel",
+          "ignoreFailures": true
+        }
+      ],
+      "postRemoteConnectCommands": [
+        {
+          "text": "set architecture i386",
+          "ignoreFailures": true
+        },
+        {
+          "text": "hbreak startup_32",
+          "ignoreFailures": true
+        },
+        {
+          "text": "hbreak main",
+          "ignoreFailures": true
+        },
+        {
+          "text": "continue",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
+      "name": "Linux 0.11 - bootsect (QEMU + gdb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/output/bootsect.elf",
+      "cwd": "${workspaceFolder}/output",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "miDebuggerServerAddress": "localhost:1234",
+      "stopAtEntry": true,
+      "preLaunchTask": "qemu-debug-boot",
+      "postDebugTask": "qemu-stop",
+      "setupCommands": [
+        {
+          "text": "set architecture i8086",
+          "ignoreFailures": true
+        },
+        {
+          "text": "set disassembly-flavor intel",
+          "ignoreFailures": true
+        }
+      ],
+      "postRemoteConnectCommands": [
+        {
+          "text": "set architecture i8086",
+          "ignoreFailures": true
+        },
+        {
+          "text": "set disassembly-flavor intel",
+          "ignoreFailures": true
+        },
+        {
+          "text": "display/i $cs*16+$pc",
+          "ignoreFailures": true
+        },
+        {
+          "text": "hbreak *0x7c00",
+          "ignoreFailures": true
+        },
+        {
+          "text": "continue",
+          "ignoreFailures": true
+        }
+      ]
+    }
+  ]
+}
