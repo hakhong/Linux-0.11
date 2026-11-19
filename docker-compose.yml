@@ -1,0 +1,8 @@
+services:
+  linux011:
+    build: .
+    container_name: linux-0.11
+    volumes:
+      - .:/build            # source tree (the repository root)
+      - ./output:/out       # Image, hdc-0.11.img, boot-debug files for QEMU/gdb in WSL
+    restart: unless-stopped
