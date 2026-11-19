@@ -11,8 +11,5 @@ tools/kernel
 tools/system
 output/
 
-# written by the boot-debug VSCode task
-.gdbinit
-
 Thumbs.db
 .DS_Store

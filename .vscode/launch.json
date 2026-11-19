@@ -44,51 +44,6 @@
           "ignoreFailures": true
         }
       ]
-    },
-    {
-      "name": "Linux 0.11 - bootsect (QEMU + gdb)",
-      "type": "cppdbg",
-      "request": "launch",
-      "program": "${workspaceFolder}/output/bootsect.elf",
-      "cwd": "${workspaceFolder}/output",
-      "MIMode": "gdb",
-      "miDebuggerPath": "/usr/bin/gdb",
-      "miDebuggerServerAddress": "localhost:1234",
-      "stopAtEntry": true,
-      "preLaunchTask": "qemu-debug-boot",
-      "postDebugTask": "qemu-stop",
-      "setupCommands": [
-        {
-          "text": "set architecture i8086",
-          "ignoreFailures": true
-        },
-        {
-          "text": "set disassembly-flavor intel",
-          "ignoreFailures": true
-        }
-      ],
-      "postRemoteConnectCommands": [
-        {
-          "text": "set architecture i8086",
-          "ignoreFailures": true
-        },
-        {
-          "text": "set disassembly-flavor intel",
-          "ignoreFailures": true
-        },
-        {
-          "text": "display/i $cs*16+$pc",
-          "ignoreFailures": true
-        },
-        {
-          "text": "hbreak *0x7c00",
-          "ignoreFailures": true
-        },
-        {
-          "text": "continue",
-          "ignoreFailures": true
-        }
-      ]
     }
   ]
 }
