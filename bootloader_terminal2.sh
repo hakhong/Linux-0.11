@@ -1,1 +1,0 @@
-gdb -nx -q -x scripts/gdb-boot.gdb output/bootsect.elf

@@ -26,7 +26,7 @@ if [ "$MODE" = boot ]; then
       echo "warning: output/hdc-0.11.img 없음 -> 커널이 루트 마운트에서 panic 한다"
     fi
   else
-    echo "warning: output/Image 없음 -> bootsect 단독 실행 (setup/보호모드 구간은 못 본다. ./build.sh 로 Image 를 만든다)"
+    echo "warning: output/Image 없음 -> bootsect 단독 실행 (setup/보호모드 구간은 못 본다. ./2_build.sh 로 Image 를 만든다)"
     FILES=(bootsect)
     ARGS=(-drive file=bootsect,format=raw,if=floppy -boot a -snapshot)
   fi
@@ -38,7 +38,7 @@ else
 fi
 
 for f in "${FILES[@]}"; do
-  [ -f "$f" ] || { echo "missing output/$f (run build.sh $MODE first)"; exit 1; }
+  [ -f "$f" ] || { echo "missing output/$f (run ./2_build.sh first)"; exit 1; }
 done
 
 qemu-system-i386 "${ARGS[@]}" -s -S "$@" &

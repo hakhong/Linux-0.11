@@ -4,13 +4,13 @@
     {
       "label": "build-main",
       "type": "shell",
-      "command": "bash ${workspaceFolder}/build.sh main",
+      "command": "bash ${workspaceFolder}/2_build.sh",
       "group": "build"
     },
     {
       "label": "build-boot",
       "type": "shell",
-      "command": "bash ${workspaceFolder}/build.sh boot",
+      "command": "bash ${workspaceFolder}/2_build.sh",
       "group": "build"
     },
     {

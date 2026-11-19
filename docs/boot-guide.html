@@ -579,7 +579,7 @@ Breakpoint 4, printk (fmt=0x13478 "%d/%d free blocks\n\r") at printk.c:22
 <div class="qa">
   <div class="q">Q6. VSCode로는 main까지 되는데 부트로더는 왜 안 되나요?</div>
   <div class="a">
-    <p>VSCode(cppdbg)는 bootsect 구간에서 gdb의 정지 상태를 "실행 중"으로 인식해 <code>stepi</code>가 안 됩니다. 그래서 WSL 터미널 두 개(<code>bootloader_terminal1.sh</code>: QEMU, <code>bootloader_terminal2.sh</code>: gdb)로 직접 디버깅합니다. 보호모드 이후(<code>startup_32</code>~<code>main</code>)는 VSCode 설정으로도 됩니다.</p>
+    <p>VSCode(cppdbg)는 bootsect 구간에서 gdb의 정지 상태를 "실행 중"으로 인식해 <code>stepi</code>가 안 됩니다. 그래서 WSL 터미널 두 개(<code>4_debug_qemu.sh</code>: QEMU, <code>5_debug_gdb.sh</code>: gdb)로 직접 디버깅합니다. 보호모드 이후(<code>startup_32</code>~<code>main</code>)는 VSCode 설정으로도 됩니다.</p>
   </div>
 </div>
 
@@ -612,13 +612,13 @@ Breakpoint 4, printk (fmt=0x13478 "%d/%d free blocks\n\r") at printk.c:22
 </div>
 
 <h2 id="gdb">7. gdb로 직접 확인하기</h2>
-<p class="sub">저장소 루트에서 실행합니다. 처음 한 번은 <code>./build.sh</code>와 <code>./build.sh boot</code>로 Image와 리스팅을 만듭니다.</p>
+<p class="sub">저장소 루트에서 실행합니다. 처음 한 번은 <code>./2_build.sh</code>로 Image와 리스팅을 만듭니다.</p>
 
 <pre><code># 터미널 1: QEMU를 gdb 대기 상태로 (output/Image + output/hdc-0.11.img). QEMU 화면 창도 뜬다
-./bootloader_terminal1.sh
+./4_debug_qemu.sh
 
 # 터미널 2: gdb 접속. 0x7c00에서 멈춘다. 멈출 때마다 현재 명령과 소스 줄이 자동 출력된다
-./bootloader_terminal2.sh</code></pre>
+./5_debug_gdb.sh</code></pre>
 
 <div class="tbl">
 <table>

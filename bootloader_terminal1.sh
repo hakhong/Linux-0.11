@@ -1,1 +1,0 @@
-bash scripts/qemu-debug.sh boot

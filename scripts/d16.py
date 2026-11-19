@@ -7,7 +7,7 @@ import tempfile
 # 보호모드(startup_32 이후)에서 불러올 심볼. 0x0 기준으로 링크되어 소스 줄 매핑이 된다.
 SYMBOL_FILE = "tools/system"
 
-# as86 -l 리스팅 파일 (build.sh boot 가 output/ 으로 복사한다)
+# as86 -l 리스팅 파일 (2_build.sh 가 output/ 으로 복사한다)
 LISTINGS = {
     "bootsect": ("output/bootsect.lst", "bootsect.s"),
     "setup": ("output/setup.lst", "setup.s"),

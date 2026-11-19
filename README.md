@@ -16,9 +16,8 @@ Linus Torvalds' original Linux 0.11 (1991) source, **built in a Docker container
 | `linux-0.11-original/` | Linus' original, untouched (reference only, not built). `diff -r linux-0.11-original . -x linux-0.11-original -x .git` shows every patch |
 | `hdc-0.11.img` | Root file system hard disk image (`/bin/sh`, `gcc`, ...) |
 | `Dockerfile`, `docker-compose.yml` | Build environment (Ubuntu 14.04, gcc 4.8, bin86) |
-| `build.sh` | Builds inside the container and copies the results to `output/` |
-| `QemuRun.sh` | Boots with QEMU in WSL |
-| `bootloader_terminal1.sh`, `bootloader_terminal2.sh`, `scripts/` | Boot loader debugging (QEMU gdbstub, gdb, the `d16` command) |
+| `1_init.sh` ~ `5_debug_gdb.sh`, `9_clean.sh` | What you run, numbered in order (see [Getting started](#getting-started)) |
+| `scripts/` | Used by the numbered scripts and VSCode: QEMU with a gdbstub, gdb settings, the `d16` command |
 | `.vscode/` | VSCode build tasks, F5 debug configurations, recommended extensions |
 | `docs/` | Boot walkthrough (Korean, English) |
 
@@ -58,20 +57,34 @@ The QEMU window shows up on Windows through WSLg.
 
 The C/C++ extension must be installed **on the WSL side**: open the folder in WSL, then press "Install in WSL" in the Extensions view.
 
-## Quick start
+## Getting started
+
+Run the numbered scripts in order, in a WSL terminal at the repository root.
+
+| Script | What it does | When |
+|---|---|---|
+| `./1_init.sh` | Builds the Docker image (Ubuntu 14.04, gcc 4.8, bin86) and starts the build container `linux-0.11` (`docker compose build --no-cache && docker compose up -d`) | Once. Takes 15+ minutes (the Ubuntu 14.04 package archive is slow) |
+| `./2_build.sh` | Builds the kernel inside the container and copies the results to `output/`: `Image`, `hdc-0.11.img`, and the boot-debug files (`bootsect.elf`, `*.lst`). Starts the container first if it is not running, e.g. after a reboot | After every source change |
+| `./3_run.sh` | Boots with QEMU in WSL; the window opens on Windows through WSLg | To run it |
+| `./4_debug_qemu.sh` | Boot loader debugging, terminal 1: QEMU halted, waiting for gdb | To debug the boot loader |
+| `./5_debug_gdb.sh` | Boot loader debugging, terminal 2: gdb, stops at 0x7c00 | Together with 4 |
+| `./9_clean.sh` | `make clean` in the container | When needed |
+
+From cloning to the shell prompt:
 
 ```bash
-./build.sh up      # once: build the image, start the container linux-0.11
-./build.sh         # build the kernel -> output/Image, output/hdc-0.11.img
-bash QemuRun.sh    # boot
+# tools (see Environment); log in again after adding yourself to the docker group
+sudo apt install qemu-system-x86 gdb python3 binutils
+sudo usermod -aG docker $USER
+
+git clone https://github.com/hakhong/Linux-0.11.git
+cd Linux-0.11
+./1_init.sh        # once
+./2_build.sh
+./3_run.sh
 ```
 
-| Command | What it does |
-|---|---|
-| `./build.sh` (`main`) | Full build. The original top-level Makefile does not descend into a directory whose archive (`fs/fs.o`, ...) already exists, so the subdirectories are made first |
-| `./build.sh boot` | `output/bootsect.elf` and listings `output/*.lst` for boot loader debugging |
-| `./build.sh clean` | `make clean` (same as `clear.sh`) |
-| `./build.sh up` | (Re)create the container (same as `environment.sh`; `Rebuild.sh` runs it in the foreground with logs) |
+`2_build.sh` makes each subdirectory before the top level, because the original top-level Makefile does not descend into a directory whose archive (`fs/fs.o`, ...) already exists.
 
 The boot ends at the `[/usr/root]#` prompt; `gcc -o hello hello.c && ./hello` works inside. The disk image also holds `iam` and `whoami`, lab programs from the earlier fork; the original kernel has no such system calls, so they do not run.
 
@@ -102,29 +115,19 @@ F5 → `Linux 0.11 - main (QEMU + gdb)`. It builds, starts QEMU and stops first 
 ### Boot loader (two terminals)
 VSCode (cppdbg) treats a target stopped in the boot sector as "running", so stepi does not work there. Debug with two WSL terminals instead, both in the repository root.
 
-1. Build (once, or after changing bootsect/setup)
-   ```
-   ./build.sh          # output/Image (needed to follow setup and protected mode)
-   ./build.sh boot     # bootsect.elf + listings (output/bootsect.lst, output/setup.lst)
-   ```
-2. Terminal 1: QEMU, waiting for gdb (ready when `QEMU gdbstub ready` appears). It boots `output/Image` if present, and also attaches `output/hdc-0.11.img` if present, so `continue` reaches the shell. Shortcut: `./bootloader_terminal1.sh`.
-   ```
-   bash scripts/qemu-debug.sh boot
-   ```
-3. Terminal 2: gdb. Stops at 0x7c00, where the BIOS runs the boot sector. Shortcut: `./bootloader_terminal2.sh`.
-   ```
-   gdb -nx -q -x scripts/gdb-boot.gdb output/bootsect.elf
-   ```
+1. Build (once, or after changing the source): `./2_build.sh`. It also makes `output/bootsect.elf` and the listings `output/bootsect.lst`, `output/setup.lst`.
+2. Terminal 1: `./4_debug_qemu.sh`. QEMU waits for gdb (ready when `QEMU gdbstub ready` appears). It boots `output/Image` and attaches `output/hdc-0.11.img`, so `continue` reaches the shell.
+3. Terminal 2: `./5_debug_gdb.sh`. gdb stops at 0x7c00, where the BIOS runs the boot sector.
 
 #### Windows
 
 | Window | Started by | Role |
 |---|---|---|
-| Terminal 1 | `bootloader_terminal1.sh` | Starts QEMU halted and waits for gdb |
+| Terminal 1 | `4_debug_qemu.sh` | Starts QEMU halted and waits for gdb |
 | QEMU screen | opened by terminal 1 | The boot screen (`Loading system ...`, kernel messages, shell) |
-| Terminal 2 | `bootloader_terminal2.sh` | gdb; type `si`, `continue`, ... here |
+| Terminal 2 | `5_debug_gdb.sh` | gdb; type `si`, `continue`, ... here |
 
-No need for `gdb -tui`. `scripts/gdb-boot.gdb` runs:
+No need for `gdb -tui`. `5_debug_gdb.sh` runs `scripts/gdb-boot.gdb`:
 ```
 set architecture i8086
 source scripts/d16.py
@@ -205,7 +208,7 @@ To finish: `quit` in gdb, then `Ctrl+C` in terminal 1. Kill a leftover QEMU with
 ### Notes
 - In real mode the address is `cs*16 + ip`; gdb's `$pc` shows only ip. Set breakpoints at linear addresses (e.g. `hbreak *0x7c00`).
 - In setup (`cs=0x9020`) a stop at an `hbreak` on a linear address shows `Program received signal SIGTRAP` instead of `Breakpoint N`. That is expected.
-- The protected-mode symbols (`tools/system`) exist only after `./build.sh`. C symbols appear as `_main` in `System.map` but are used without `_` in gdb (`main`).
+- The protected-mode symbols (`tools/system`) exist only after `./2_build.sh`. C symbols appear as `_main` in `System.map` but are used without `_` in gdb (`main`).
 - Only one gdb can attach to port 1234 at a time; do not use VSCode debugging and terminal gdb together.
 - `scripts/qemu-debug.sh` kills any running QEMU when it starts.
 

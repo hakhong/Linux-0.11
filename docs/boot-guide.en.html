@@ -579,7 +579,7 @@ Breakpoint 4, printk (fmt=0x13478 "%d/%d free blocks\n\r") at printk.c:22
 <div class="qa">
   <div class="q">Q6. VSCode works down to main; why not for the boot loader?</div>
   <div class="a">
-    <p>In the boot sector, VSCode (cppdbg) reads gdb's stopped state as "running", so <code>stepi</code> does not work. Debug with two WSL terminals instead (<code>bootloader_terminal1.sh</code>: QEMU, <code>bootloader_terminal2.sh</code>: gdb). From protected mode on (<code>startup_32</code>~<code>main</code>) the VSCode configuration works.</p>
+    <p>In the boot sector, VSCode (cppdbg) reads gdb's stopped state as "running", so <code>stepi</code> does not work. Debug with two WSL terminals instead (<code>4_debug_qemu.sh</code>: QEMU, <code>5_debug_gdb.sh</code>: gdb). From protected mode on (<code>startup_32</code>~<code>main</code>) the VSCode configuration works.</p>
   </div>
 </div>
 
@@ -612,13 +612,13 @@ Breakpoint 4, printk (fmt=0x13478 "%d/%d free blocks\n\r") at printk.c:22
 </div>
 
 <h2 id="gdb">7. Checking with gdb</h2>
-<p class="sub">Run from the repository root. Once, build the Image and listings with <code>./build.sh</code> and <code>./build.sh boot</code>.</p>
+<p class="sub">Run from the repository root. Once, build the Image and listings with <code>./2_build.sh</code>.</p>
 
 <pre><code># Terminal 1: QEMU waiting for gdb (output/Image + output/hdc-0.11.img); the QEMU window opens too
-./bootloader_terminal1.sh
+./4_debug_qemu.sh
 
 # Terminal 2: gdb; stops at 0x7c00 and prints the current instruction and source line at every stop
-./bootloader_terminal2.sh</code></pre>
+./5_debug_gdb.sh</code></pre>
 
 <div class="tbl">
 <table>

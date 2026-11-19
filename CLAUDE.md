@@ -13,18 +13,20 @@ Linux 0.11(1991) 원본 소스를 WSL 안의 Docker 컨테이너(Ubuntu 14.04, g
 ## 빌드와 실행
 
 ```bash
-./build.sh up      # 컨테이너 linux-0.11 (재)생성 (처음 한 번)
-./build.sh         # 전체 빌드 -> output/Image, output/hdc-0.11.img
-./build.sh boot    # 부트로더 디버깅용 output/bootsect.elf, output/*.lst
-./build.sh clean
-bash QemuRun.sh    # 부팅
+./1_init.sh        # 처음 한 번: 이미지 빌드, 컨테이너 linux-0.11 시작
+./2_build.sh       # 빌드 -> output/ (Image, hdc-0.11.img, 부트 디버깅 파일). 컨테이너가 꺼져 있으면 먼저 띄움
+./3_run.sh         # QEMU로 부팅
+./4_debug_qemu.sh  # 부트로더 디버깅 터미널 1 (QEMU가 gdb 대기)
+./5_debug_gdb.sh   # 부트로더 디버깅 터미널 2 (gdb)
+./9_clean.sh       # make clean
 ```
 
+- 실행하는 스크립트는 루트에 번호를 붙여 순서대로 둔다. 내부용(`qemu-debug.sh`, `gdb-boot.gdb`, `d16.py`)은 `scripts/`에 둔다.
 - 빌드는 컨테이너 안에서 저장소 루트를 `/build`로 마운트해서 한다. QEMU, gdb, `scripts/d16.py`는 WSL에서 돈다.
-- 원본 최상위 Makefile은 하위 디렉터리 결과물(`fs/fs.o` 등)이 있으면 다시 들어가지 않는다. `build.sh`가 하위 디렉터리를 먼저 `make` 한다.
+- 원본 최상위 Makefile은 하위 디렉터리 결과물(`fs/fs.o` 등)이 있으면 다시 들어가지 않는다. `2_build.sh`가 하위 디렉터리를 먼저 `make` 한다.
 - 저장소가 Windows 드라이브(`/mnt/d/...`)에 있으면 대소문자를 구분하지 않는다 (`keyboard.s` = `keyboard.S`).
-- 부트로더 디버깅: 터미널 1 `./bootloader_terminal1.sh`, 터미널 2 `./bootloader_terminal2.sh`. main 이후는 VSCode F5.
-- `scripts/qemu-debug.sh`는 시작할 때 실행 중인 QEMU를 모두 끈다. 사용자가 띄운 QEMU가 있을 수 있으니, 테스트할 때는 이미지를 복사해서 따로 띄우고 자기가 띄운 프로세스만 PID로 끈다.
+- main 이후 디버깅은 VSCode F5 (`.vscode/tasks.json`이 `2_build.sh`와 `scripts/qemu-debug.sh`를 부른다).
+- `scripts/qemu-debug.sh`(`4_debug_qemu.sh`)는 시작할 때 실행 중인 QEMU를 모두 끈다. 사용자가 띄운 QEMU가 있을 수 있으니, 테스트할 때는 이미지를 복사해서 따로 띄우고 자기가 띄운 프로세스만 PID로 끈다.
 - 남은 QEMU 정리: `pkill -f '^qemu-system-i386'` (`-x`는 이름이 15자로 잘려서 안 맞는다).
 
 ## 문서 (한국어, 영어 둘 다 유지)

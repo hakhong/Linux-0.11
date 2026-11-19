@@ -16,9 +16,8 @@ Linus Torvalds의 Linux 0.11(1991) 원본 소스를 **WSL 안의 Docker 컨테�
 | `linux-0.11-original/` | Linus의 원본 그대로 (참조용, 빌드하지 않음). `diff -r linux-0.11-original . -x linux-0.11-original -x .git`로 패치 전체를 본다 |
 | `hdc-0.11.img` | 루트 파일시스템 하드디스크 이미지 (`/bin/sh`, `gcc` 등이 들어 있음) |
 | `Dockerfile`, `docker-compose.yml` | 빌드 환경 (Ubuntu 14.04, gcc 4.8, bin86) |
-| `build.sh` | 컨테이너 안에서 빌드하고 결과를 `output/`으로 복사 |
-| `QemuRun.sh` | WSL의 QEMU로 부팅 |
-| `bootloader_terminal1.sh`, `bootloader_terminal2.sh`, `scripts/` | 부트로더 디버깅 (QEMU gdbstub, gdb, `d16` 명령) |
+| `1_init.sh` ~ `5_debug_gdb.sh`, `9_clean.sh` | 실행하는 스크립트. 번호가 순서다 ([처음부터 실행하는 순서](#처음부터-실행하는-순서)) |
+| `scripts/` | 번호 스크립트와 VSCode가 쓰는 것: gdbstub을 켠 QEMU, gdb 설정, `d16` 명령 |
 | `.vscode/` | VSCode 빌드 작업, F5 디버깅 설정, 추천 확장 |
 | `docs/` | 부팅 해설 (한국어, 영어) |
 
@@ -58,20 +57,34 @@ QEMU 창은 WSLg로 Windows에 뜬다.
 
 C/C++ 확장은 **WSL 쪽**에 설치되어야 한다. WSL에서 폴더를 연 뒤 확장 화면에서 "Install in WSL"을 누른다.
 
-## 빠른 시작
+## 처음부터 실행하는 순서
+
+번호가 붙은 스크립트를 순서대로, WSL 터미널에서 저장소 루트에서 실행한다.
+
+| 스크립트 | 하는 일 | 언제 |
+|---|---|---|
+| `./1_init.sh` | Docker 이미지(Ubuntu 14.04, gcc 4.8, bin86)를 만들고 빌드 컨테이너 `linux-0.11`을 띄운다 (`docker compose build --no-cache && docker compose up -d`) | 처음 한 번. 15분 이상 걸린다 (Ubuntu 14.04 패키지 저장소가 느림) |
+| `./2_build.sh` | 컨테이너 안에서 커널을 빌드하고 결과를 `output/`으로 복사한다: `Image`, `hdc-0.11.img`, 부트 디버깅용 `bootsect.elf`, `*.lst`. 재부팅 등으로 컨테이너가 꺼져 있으면 먼저 띄운다 | 소스를 고칠 때마다 |
+| `./3_run.sh` | WSL의 QEMU로 부팅한다. 창은 WSLg로 Windows에 뜬다 | 실행해 볼 때 |
+| `./4_debug_qemu.sh` | 부트로더 디버깅 터미널 1: QEMU를 멈춘 채로 띄우고 gdb를 기다린다 | 부트로더를 디버깅할 때 |
+| `./5_debug_gdb.sh` | 부트로더 디버깅 터미널 2: gdb로 접속, 0x7c00에서 멈춘다 | 4와 함께 |
+| `./9_clean.sh` | 컨테이너 안에서 `make clean` | 필요할 때 |
+
+clone부터 쉘 프롬프트까지:
 
 ```bash
-./build.sh up      # 처음 한 번: 이미지 빌드, 컨테이너 linux-0.11 시작
-./build.sh         # 커널 빌드 -> output/Image, output/hdc-0.11.img
-bash QemuRun.sh    # 부팅
+# 도구 설치 (개발 환경 참고). docker 그룹에 넣은 뒤에는 터미널을 새로 연다
+sudo apt install qemu-system-x86 gdb python3 binutils
+sudo usermod -aG docker $USER
+
+git clone https://github.com/hakhong/Linux-0.11.git
+cd Linux-0.11
+./1_init.sh        # 처음 한 번
+./2_build.sh
+./3_run.sh
 ```
 
-| 명령 | 하는 일 |
-|---|---|
-| `./build.sh` (`main`) | 전체 빌드. 원본 최상위 Makefile은 하위 디렉터리 결과물(`fs/fs.o` 등)이 있으면 다시 들어가지 않으므로, 하위 디렉터리를 먼저 `make` 한다 |
-| `./build.sh boot` | 부트로더 디버깅용 `output/bootsect.elf`, 리스팅 `output/*.lst` |
-| `./build.sh clean` | `make clean` (`clear.sh`와 같다) |
-| `./build.sh up` | 컨테이너 (재)생성 (`environment.sh`와 같다. `Rebuild.sh`는 로그를 보며 포그라운드로 실행) |
+`2_build.sh`는 하위 디렉터리를 먼저 `make` 한다. 원본 최상위 Makefile은 하위 디렉터리 결과물(`fs/fs.o` 등)이 이미 있으면 다시 들어가지 않기 때문이다.
 
 부팅하면 `[/usr/root]#` 프롬프트가 뜬다. 쉘 안에서 `gcc -o hello hello.c && ./hello`도 된다. 이 디스크 이미지에는 예전 판의 실습용 프로그램 `iam`, `whoami`도 들어 있는데, 원본 커널에는 그 시스템 콜이 없어서 실행되지 않는다.
 
@@ -102,29 +115,19 @@ F5 → `Linux 0.11 - main (QEMU + gdb)`. 빌드한 뒤 QEMU를 띄우고, `start
 ### 부트로더 (터미널 2개)
 VSCode(cppdbg)는 bootsect 구간에서 정지 상태를 "실행 중"으로 인식해 stepi가 안 된다. 그래서 WSL 터미널 2개로 직접 디버깅한다. 둘 다 저장소 루트에서 실행한다.
 
-1. 빌드 (처음 한 번 또는 bootsect/setup 수정 후)
-   ```
-   ./build.sh          # output/Image 생성 (setup, 보호모드 구간까지 따라가려면 필요)
-   ./build.sh boot     # bootsect.elf + 리스팅(output/bootsect.lst, output/setup.lst) 생성
-   ```
-2. 터미널 1: QEMU를 gdb 대기 상태로 실행한다 (`QEMU gdbstub ready`가 나오면 준비 완료). `output/Image`가 있으면 그걸로 부팅하고, `output/hdc-0.11.img`도 있으면 같이 붙여서 `continue`로 쉘까지 갈 수 있다. 줄여서 `./bootloader_terminal1.sh`.
-   ```
-   bash scripts/qemu-debug.sh boot
-   ```
-3. 터미널 2: gdb 접속. 0x7c00(BIOS가 부트섹터를 올려 실행하는 주소)에서 멈춘다. 줄여서 `./bootloader_terminal2.sh`.
-   ```
-   gdb -nx -q -x scripts/gdb-boot.gdb output/bootsect.elf
-   ```
+1. 빌드 (처음 한 번 또는 소스 수정 후): `./2_build.sh`. `output/bootsect.elf`와 리스팅 `output/bootsect.lst`, `output/setup.lst`도 함께 만든다.
+2. 터미널 1: `./4_debug_qemu.sh`. QEMU가 gdb를 기다린다 (`QEMU gdbstub ready`가 나오면 준비 완료). `output/Image`로 부팅하고 `output/hdc-0.11.img`도 붙여서 `continue`로 쉘까지 갈 수 있다.
+3. 터미널 2: `./5_debug_gdb.sh`. gdb가 0x7c00(BIOS가 부트섹터를 올려 실행하는 주소)에서 멈춘다.
 
 #### 창 구성
 
 | 창 | 띄우는 것 | 역할 |
 |---|---|---|
-| 터미널 1 | `bootloader_terminal1.sh` | QEMU를 멈춘 상태로 켜고 gdb 접속을 기다림 |
+| 터미널 1 | `4_debug_qemu.sh` | QEMU를 멈춘 상태로 켜고 gdb 접속을 기다림 |
 | QEMU 화면 | 터미널 1이 자동으로 띄움 | 부팅 화면 (`Loading system ...`, 커널 메시지, 쉘) |
-| 터미널 2 | `bootloader_terminal2.sh` | gdb. 여기서 `si`, `continue` 등을 입력 |
+| 터미널 2 | `5_debug_gdb.sh` | gdb. 여기서 `si`, `continue` 등을 입력 |
 
-`gdb -tui`를 따로 띄울 필요는 없다. `scripts/gdb-boot.gdb`가 아래 명령을 대신 실행한다.
+`gdb -tui`를 따로 띄울 필요는 없다. `5_debug_gdb.sh`가 실행하는 `scripts/gdb-boot.gdb`의 내용은 이렇다.
 ```
 set architecture i8086
 source scripts/d16.py
@@ -205,7 +208,7 @@ TUI를 쓰고 싶으면 gdb 안에서 `layout regs`만 입력한다 (레지스�
 ### 주의
 - 리얼모드에서는 실제 주소가 `cs*16 + ip`이다. gdb의 `$pc`는 ip만 보여 준다. 브레이크포인트는 선형 주소로 건다 (예: `hbreak *0x7c00`).
 - setup 구간(`cs=0x9020`)에서는 선형 주소로 건 `hbreak`에 멈춰도 `Breakpoint N` 대신 `Program received signal SIGTRAP`으로 표시된다. 정상이다.
-- 보호모드 심볼(`tools/system`)은 `./build.sh`로 빌드해야 생긴다. C 심볼은 `System.map`에 `_main`처럼 보이지만 gdb에서는 `main`처럼 `_` 없이 쓴다.
+- 보호모드 심볼(`tools/system`)은 `./2_build.sh`로 빌드해야 생긴다. C 심볼은 `System.map`에 `_main`처럼 보이지만 gdb에서는 `main`처럼 `_` 없이 쓴다.
 - 포트 1234는 한 번에 하나의 gdb만 접속할 수 있다. VSCode 디버깅과 터미널 gdb를 동시에 쓰지 않는다.
 - `scripts/qemu-debug.sh`는 시작할 때 남아 있는 QEMU를 모두 끈다.
 
