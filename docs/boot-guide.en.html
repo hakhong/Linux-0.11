@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linux 0.11 Boot Walkthrough</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* 레이아웃: 한 칼럼 문서. 위에서 아래로 구상도 → 단계별 과정 → 개념 → 질문과 답 → 치트시트.
+   색은 모드 구분 자체가 정보다: 앰버=리얼모드(16비트), 청록=보호모드(32비트). */
+:root {
+  --bg: #f3f6f8;
+  --surface: #ffffff;
+  --ink: #16212b;
+  --muted: #566676;
+  --line: #d3dbe2;
+  --code-bg: #e8eef3;
+  --rm: #a85208;
+  --rm-bg: #fbecd9;
+  --pm: #0a6a8c;
+  --pm-bg: #d9eff6;
+  --warn: #b3261e;
+  --sans: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1419; --surface: #16202a; --ink: #e5ebf0; --muted: #97a6b4; --line: #2a3743;
+    --code-bg: #1c2833; --rm: #f2a560; --rm-bg: #3a2a17; --pm: #5ec4e4; --pm-bg: #12333f; --warn: #ff8a80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1419; --surface: #16202a; --ink: #e5ebf0; --muted: #97a6b4; --line: #2a3743;
+  --code-bg: #1c2833; --rm: #f2a560; --rm-bg: #3a2a17; --pm: #5ec4e4; --pm-bg: #12333f; --warn: #ff8a80;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.75; }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-size: clamp(26px, 4.4vw, 38px); line-height: 1.25; margin: 0 0 8px; font-weight: 700; text-wrap: balance; }
+h2 { font-size: 22px; margin: 52px 0 6px; font-weight: 700; text-wrap: balance; }
+h3 { font-size: 16px; margin: 0 0 4px; font-weight: 700; }
+p { margin: 8px 0; max-width: 72ch; }
+.lead { color: var(--muted); font-size: 16px; max-width: 70ch; }
+.sub { color: var(--muted); margin: 0 0 18px; }
+code, pre, .mono { font-family: var(--mono); font-size: 0.9em; }
+code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; }
+pre { background: var(--code-bg); padding: 12px 14px; border-radius: 6px; overflow-x: auto; line-height: 1.6; margin: 10px 0; }
+pre code { background: none; padding: 0; }
+.nav { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 18px 0 0; padding: 0; list-style: none; font-size: 14px; }
+.nav a { color: var(--pm); text-decoration: none; border-bottom: 1px solid var(--line); }
+.nav a:hover, .nav a:focus-visible { border-bottom-color: var(--pm); outline: none; }
+.summary { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 18px 10px; margin-top: 26px; }
+.summary ul { margin: 6px 0; padding-left: 20px; }
+.summary li { margin: 4px 0; }
+.chip { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .03em; padding: 1px 9px; border-radius: 99px; white-space: nowrap; line-height: 1.7; }
+.chip.rm { background: var(--rm-bg); color: var(--rm); }
+.chip.pm { background: var(--pm-bg); color: var(--pm); }
+.fig { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin: 14px 0; }
+.fig .scroll { overflow-x: auto; }
+.fig svg { display: block; width: 100%; min-width: 720px; height: auto; }
+figcaption { color: var(--muted); font-size: 13.5px; margin-top: 8px; max-width: 80ch; }
+/* svg tokens */
+.s-ink { fill: var(--ink); } .s-mut { fill: var(--muted); }
+.s-line { stroke: var(--ink); fill: none; stroke-width: 1.5; }
+.s-box-rm { fill: var(--rm-bg); stroke: var(--rm); stroke-width: 1.5; }
+.s-box-pm { fill: var(--pm-bg); stroke: var(--pm); stroke-width: 1.5; }
+.s-box-empty { fill: none; stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.s-t-rm { fill: var(--rm); } .s-t-pm { fill: var(--pm); }
+.s-dash { stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; }
+.s-warn { fill: var(--warn); }
+.s-pm-line { stroke: var(--pm); stroke-width: 1.8; fill: none; }
+svg text { font-family: var(--sans); }
+svg .m { font-family: var(--mono); }
+/* steps */
+.steps { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; counter-reset: step; }
+.step { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 0 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; border-left-width: 4px; }
+.step.rm { border-left-color: var(--rm); } .step.pm { border-left-color: var(--pm); }
+.step::before { counter-increment: step; content: counter(step); font-family: var(--mono); font-weight: 500; font-size: 20px; color: var(--muted); grid-column: 1; grid-row: 1 / span 9; line-height: 1.3; }
+.step > * { grid-column: 2; }
+.step .head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.step .where { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+.step p { margin: 4px 0; }
+.step .gdb { font-size: 13px; color: var(--muted); }
+.boundary { text-align: center; color: var(--warn); font-weight: 700; font-size: 14px; padding: 8px; border: 1.5px dashed var(--warn); border-radius: 8px; background: transparent; }
+/* concept grid */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px 14px; min-width: 0; }
+.card p { margin: 4px 0; font-size: 14.5px; }
+.tbl { overflow-x: auto; margin: 12px 0; }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; background: var(--surface); }
+th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); font-weight: 700; }
+td.rmc { background: var(--rm-bg); } td.pmc { background: var(--pm-bg); }
+/* qa */
+.qa { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; overflow: hidden; }
+.qa .q { padding: 12px 16px; font-weight: 700; border-bottom: 1px solid var(--line); background: var(--code-bg); }
+.qa .a { padding: 8px 16px 12px; }
+.qa .a ul { margin: 6px 0; padding-left: 20px; }
+.note { border-left: 3px solid var(--warn); padding: 4px 12px; margin: 12px 0; color: var(--ink); }
+.msg { font-family: var(--mono); font-size: 13px; background: #0b0f13; color: #d7dde3; padding: 6px 10px; border-radius: 6px; margin: 6px 0 2px; white-space: pre-wrap; }
+.msg .lbl { color: #8aa0b2; font-family: var(--sans); font-size: 12px; margin-right: 8px; }
+.step.us { border-left-color: var(--muted); }
+.chip.us { background: var(--code-bg); color: var(--muted); }
+footer { margin-top: 48px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 14px; }
+@media (max-width: 520px) { .step { grid-template-columns: 28px minmax(0, 1fr); gap: 0 10px; padding: 12px; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <h1>Booting Linux 0.11: from power-on to the shell</h1>
+  <p class="lead">From the moment the BIOS loads the boot sector, through <code>main()</code>, to the shell prompt <code>[/usr/root]#</code>, following this repository's source. The kernel source is Linus' original (<code>linux-0.11-original/</code>) with only what gcc 4.8 and QEMU strictly need changed; <code>bootsect.s</code> and <code>setup.s</code> are identical to the original. The changes are listed in the README under "Changes from the original" and in <a href="#qa">Q7</a> below. Addresses and values were checked with gdb in QEMU (<code>-m 16M</code>).</p>
+  <ul class="nav">
+    <li><a href="boot-guide.html" lang="ko">한국어</a></li>
+    <li><a href="#map">Overview</a></li>
+    <li><a href="#steps">Step by step</a></li>
+    <li><a href="#memory">Memory map</a></li>
+    <li><a href="#messages">Screen messages</a></li>
+    <li><a href="#concepts">Key concepts</a></li>
+    <li><a href="#qa">Q&amp;A</a></li>
+    <li><a href="#gdb">Checking with gdb</a></li>
+  </ul>
+  <div class="summary">
+    <h3 style="margin-top:10px">In short</h3>
+    <ul>
+      <li>The boot loader is two programs, <b>bootsect + setup</b>. <code>jmpi 0,8</code> in <code>setup.s</code> (line 193) is the border between boot loader and kernel.</li>
+      <li><b>Loading from disk into RAM is finished first, in real mode</b>, because the BIOS disk interrupt (<code>int 0x13</code>) works only in real mode.</li>
+      <li>Then setup turns on protected mode, and the 32-bit kernel starts at <code>startup_32</code> in <code>head.s</code> (address 0) and reaches <code>main()</code>.</li>
+      <li><code>init</code> (task 1), created by <code>main()</code>, mounts the root file system from the hard disk and starts <code>/bin/sh</code>. From the root mount on, the kernel uses its own driver (<code>hd.c</code>).</li>
+      <li>Machine code carries no 16/32-bit marker. How it is read depends on <b>the CPU's current mode</b> and <b>the assembler/disassembler settings</b>.</li>
+    </ul>
+  </div>
+</header>
+
+<h2 id="map">1. Overview</h2>
+<p class="sub">Colors show the CPU mode. <span class="chip rm">real mode, 16-bit</span> <span class="chip pm">protected mode, 32-bit</span></p>
+
+<figure class="fig">
+  <div class="scroll">
+  <svg viewBox="0 0 980 210" role="img" aria-label="Boot flow: BIOS, bootsect and setup run in real mode, head and main in protected mode; jmpi 0,8 in setup is the border between boot loader and kernel">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="s-ink"/></marker>
+    </defs>
+    <path d="M15 34 V26 H565 V34" class="s-line"/>
+    <text x="290" y="17" text-anchor="middle" font-size="13" font-weight="700" class="s-ink">Boot loader (bootsect.s + setup.s)</text>
+    <path d="M615 34 V26 H965 V34" class="s-line"/>
+    <text x="790" y="17" text-anchor="middle" font-size="13" font-weight="700" class="s-ink">Kernel (system = head.s + main.c …)</text>
+
+    <rect x="15" y="60" width="150" height="100" rx="6" class="s-box-rm"/>
+    <text x="90" y="86" text-anchor="middle" font-size="15" font-weight="700" class="s-t-rm">BIOS</text>
+    <text x="90" y="108" text-anchor="middle" font-size="12" class="s-ink">after POST, loads the</text>
+    <text x="90" y="124" text-anchor="middle" font-size="12" class="s-ink">boot sector at 0x7c00</text>
+    <text x="90" y="146" text-anchor="middle" font-size="11" class="s-mut m">f000:fff0 → 0000:7c00</text>
+
+    <rect x="215" y="60" width="150" height="100" rx="6" class="s-box-rm"/>
+    <text x="290" y="86" text-anchor="middle" font-size="15" font-weight="700" class="s-t-rm">bootsect</text>
+    <text x="290" y="108" text-anchor="middle" font-size="12" class="s-ink">copies itself to 0x90000</text>
+    <text x="290" y="124" text-anchor="middle" font-size="12" class="s-ink">reads setup and system</text>
+    <text x="290" y="146" text-anchor="middle" font-size="11" class="s-mut m">BIOS int 0x13</text>
+
+    <rect x="415" y="60" width="150" height="100" rx="6" class="s-box-rm"/>
+    <text x="490" y="86" text-anchor="middle" font-size="15" font-weight="700" class="s-t-rm">setup</text>
+    <text x="490" y="108" text-anchor="middle" font-size="12" class="s-ink">HW info, moves system</text>
+    <text x="490" y="124" text-anchor="middle" font-size="12" class="s-ink">GDT, A20, PIC, PE via lmsw</text>
+    <text x="490" y="146" text-anchor="middle" font-size="11" class="s-mut m">0x90200</text>
+
+    <rect x="615" y="60" width="150" height="100" rx="6" class="s-box-pm"/>
+    <text x="690" y="86" text-anchor="middle" font-size="15" font-weight="700" class="s-t-pm">head</text>
+    <text x="690" y="108" text-anchor="middle" font-size="12" class="s-ink">segments, IDT, GDT</text>
+    <text x="690" y="124" text-anchor="middle" font-size="12" class="s-ink">turns on paging</text>
+    <text x="690" y="146" text-anchor="middle" font-size="11" class="s-mut m">startup_32 @ 0x0</text>
+
+    <rect x="815" y="60" width="150" height="100" rx="6" class="s-box-pm"/>
+    <text x="890" y="86" text-anchor="middle" font-size="15" font-weight="700" class="s-t-pm">main() → init</text>
+    <text x="890" y="108" text-anchor="middle" font-size="12" class="s-ink">devices, scheduler</text>
+    <text x="890" y="124" text-anchor="middle" font-size="12" class="s-ink">mount root → /bin/sh</text>
+    <text x="890" y="146" text-anchor="middle" font-size="11" class="s-mut m">init/main.c</text>
+
+    <line x1="165" y1="110" x2="213" y2="110" class="s-line" marker-end="url(#ar)"/>
+    <text x="189" y="102" text-anchor="middle" font-size="10" class="s-mut m">jmp</text>
+    <line x1="365" y1="110" x2="413" y2="110" class="s-line" marker-end="url(#ar)"/>
+    <text x="389" y="102" text-anchor="middle" font-size="10" class="s-mut m">jmpi</text>
+    <line x1="565" y1="110" x2="613" y2="110" class="s-pm-line" marker-end="url(#ar)"/>
+    <text x="589" y="102" text-anchor="middle" font-size="10" class="s-mut m">jmpi</text>
+    <line x1="765" y1="110" x2="813" y2="110" class="s-line" marker-end="url(#ar)"/>
+    <text x="789" y="102" text-anchor="middle" font-size="10" class="s-mut m">ret</text>
+    <line x1="590" y1="36" x2="590" y2="192" class="s-dash"/>
+    <text x="590" y="205" text-anchor="middle" font-size="12" font-weight="700" class="s-warn">jmpi 0,8 (setup.s:193): CS becomes the 32-bit code segment</text>
+  </svg>
+  </div>
+  <figcaption>The boot only moves forward. The boot loader (the first three boxes) runs entirely in real mode; past the dashed line the CPU executes 32-bit code.</figcaption>
+</figure>
+
+<figure class="fig">
+  <div class="scroll">
+  <svg viewBox="0 0 760 410" role="img" aria-label="Memory layout: left, when bootsect has finished loading; right, after setup moved system to 0x0">
+    <defs>
+      <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="s-ink"/></marker>
+    </defs>
+    <text x="170" y="18" text-anchor="middle" font-size="13" font-weight="700" class="s-ink">bootsect has finished loading</text>
+    <text x="590" y="18" text-anchor="middle" font-size="13" font-weight="700" class="s-ink">setup moved system (just before PM)</text>
+
+    <rect x="20" y="30" width="300" height="46" rx="4" class="s-box-rm"/>
+    <text x="30" y="50" font-size="12" font-weight="700" class="s-t-rm m">0x90200</text>
+    <text x="30" y="67" font-size="12.5" class="s-ink">setup (4 sectors = 2 KB, 312 bytes used)</text>
+    <rect x="20" y="82" width="300" height="46" rx="4" class="s-box-rm"/>
+    <text x="30" y="102" font-size="12" font-weight="700" class="s-t-rm m">0x90000</text>
+    <text x="30" y="119" font-size="12.5" class="s-ink">bootsect copy (running)</text>
+    <rect x="20" y="134" width="300" height="40" rx="4" class="s-box-empty"/>
+    <text x="170" y="159" text-anchor="middle" font-size="12" class="s-mut">· · · empty · · ·</text>
+    <rect x="20" y="180" width="300" height="60" rx="4" class="s-box-rm"/>
+    <text x="30" y="200" font-size="12" font-weight="700" class="s-t-rm m">0x10000</text>
+    <text x="30" y="217" font-size="12.5" class="s-ink">system (head + main … the whole kernel)</text>
+    <text x="30" y="233" font-size="11.5" class="s-mut">at most SYSSIZE = 0x3000 paragraphs = 192 KB</text>
+    <rect x="20" y="246" width="300" height="40" rx="4" class="s-box-empty"/>
+    <text x="30" y="270" font-size="12" class="s-mut m">0x07c00  original bootsect (no longer needed)</text>
+    <rect x="20" y="292" width="300" height="46" rx="4" class="s-box-rm"/>
+    <text x="30" y="312" font-size="12" font-weight="700" class="s-t-rm m">0x00000</text>
+    <text x="30" y="329" font-size="12.5" class="s-ink">BIOS interrupt vector table (IVT)</text>
+
+    <rect x="440" y="30" width="300" height="46" rx="4" class="s-box-rm"/>
+    <text x="450" y="50" font-size="12" font-weight="700" class="s-t-rm m">0x90200</text>
+    <text x="450" y="67" font-size="12.5" class="s-ink">setup (turns on PE here with lmsw)</text>
+    <rect x="440" y="82" width="300" height="46" rx="4" class="s-box-rm"/>
+    <text x="450" y="100" font-size="12" font-weight="700" class="s-t-rm m">0x90000</text>
+    <text x="450" y="116" font-size="11.5" class="s-ink">collected HW info · 0x90002 extended memory</text>
+    <rect x="440" y="134" width="300" height="40" rx="4" class="s-box-empty"/>
+    <text x="450" y="152" font-size="11.5" class="s-mut m">0x90080 HD info · 0x901FC root device</text>
+    <text x="450" y="167" font-size="11" class="s-mut">main() reads these values</text>
+    <rect x="440" y="180" width="300" height="60" rx="4" class="s-box-empty"/>
+    <text x="590" y="214" text-anchor="middle" font-size="12" class="s-mut">empty (system moved down)</text>
+    <rect x="440" y="246" width="300" height="40" rx="4" class="s-box-empty"/>
+    <text x="450" y="270" font-size="12" class="s-mut m">0x07c00  (unused)</text>
+    <rect x="440" y="292" width="300" height="86" rx="4" class="s-box-pm"/>
+    <text x="450" y="312" font-size="12" font-weight="700" class="s-t-pm m">0x00000</text>
+    <text x="450" y="329" font-size="12.5" class="s-ink">system: pg_dir, startup_32, the kernel</text>
+    <text x="450" y="347" font-size="11.5" class="s-warn">IVT overwritten → no more BIOS calls</text>
+    <text x="450" y="365" font-size="11.5" class="s-mut">startup_32 of head.s is exactly at 0x0</text>
+
+    <path d="M320 212 C 380 212, 380 336, 438 336" class="s-pm-line" marker-end="url(#ar2)"/>
+    <text x="378" y="270" text-anchor="middle" font-size="11" class="s-t-pm" transform="rotate(-90 378 270)">do_move: 0x10000 → 0x0</text>
+    <text x="170" y="365" text-anchor="middle" font-size="11.5" class="s-mut">Not to scale. Linear (physical) addresses.</text>
+  </svg>
+  </div>
+  <figcaption>setup's <code>do_move</code> copies system from 0x10000 to 0x0, 64 KB at a time. That wipes out the BIOS interrupt vectors, so everything needed from the BIOS is saved near 0x90000 first.</figcaption>
+</figure>
+
+<h2 id="steps">2. Step by step to the shell</h2>
+<p class="sub">Locations are file:line in the source, relative to the repository root. The numbers are the actual order of execution. Black boxes are what that step prints on screen.</p>
+
+<ol class="steps">
+  <li class="step rm">
+    <div class="head"><h3>CPU reset, BIOS</h3><span class="chip rm">real mode</span><span class="where">SeaBIOS ROM · 0xF0000~0xFFFFF</span></div>
+    <p>Right after reset the CPU starts at <code>f000:fff0</code> (linear <code>0xFFFF0</code>). The <code>jmp f000:e05b</code> there enters the BIOS, which runs the power-on self test (POST), fills the interrupt vector table and BIOS data area, and runs the VGA BIOS and the iPXE option ROM.</p>
+    <div class="msg"><span class="lbl">screen</span>SeaBIOS (version 1.16.3-...)
+iPXE (https://ipxe.org) ...
+Booting from Floppy...</div>
+    <div class="gdb">gdb: right after attaching, <code>info registers cs eip</code> → <code>cs=0xf000 eip=0xfff0</code></div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>The BIOS loads the boot sector at 0x7c00</h3><span class="chip rm">real mode</span><span class="where">boot/bootsect.s:252–253</span></div>
+    <p>It reads the first 512 bytes of the floppy (the start of <code>Image</code> = bootsect) to <code>0x7c00</code>. If the last two bytes are <code>0x55 0xAA</code> (<code>boot_flag: .word 0xAA55</code>), the sector is bootable and the BIOS jumps to <code>0000:7c00</code>.</p>
+    <div class="gdb">gdb: stops at <code>hbreak *0x7c00</code>. <code>x/2xb 0x7dfe</code> → <code>0x55 0xaa</code></div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>bootsect copies itself to 0x90000</h3><span class="chip rm">real mode</span><span class="where">bootsect.s:46–56</span></div>
+    <p>The area around <code>0x7c00</code> is about to be reused, so <code>mov cx,#256</code> + <code>rep movw</code> moves 256 words (512 bytes) to <code>0x9000:0000</code>, and <code>jmpi go,INITSEG</code> continues in the copy.</p>
+    <div class="gdb">gdb: <code>hbreak *0x90018</code> (<code>go:</code>)</div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>Stack, then read setup</h3><span class="chip rm">real mode</span><span class="where">go:57 · load_setup:67</span></div>
+    <p><code>ds=es=ss=0x9000</code>, <code>sp=0xFF00</code> (stack at <code>0x9FF00</code>). BIOS <code>int 0x13</code> (AH=2) reads <code>SETUPLEN</code>=4 sectors, starting at sector 2, to <code>0x90200</code>. On failure it resets the disk (AH=0) and retries.</p>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>Disk parameters and the message</h3><span class="chip rm">real mode</span><span class="where">ok_load_setup:79 · int 0x10:96,102</span></div>
+    <p><code>int 0x13</code> (AH=8) returns the sectors per track, stored in <code>sectors</code> (18 for a 1.44 MB floppy). Then <code>int 0x10</code> (AH=3 cursor position, AX=0x1301 write string) prints <code>msg1</code>, the only message the original boot loader prints.</p>
+    <div class="msg"><span class="lbl">screen</span>Loading system ...</div>
+    <div class="gdb">gdb: <code>hbreak *0x9003d</code> (<code>ok_load_setup:</code>)</div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>Read system (the kernel) to 0x10000</h3><span class="chip rm">real mode</span><span class="where">call read_it:109 · read_it:151 · read_track:198</span></div>
+    <p>With <code>es=SYSSEG</code> (<code>0x1000</code>), <code>read_it</code> repeats <code>int 0x13</code> track by track up to <code>ENDSEG</code> (<code>0x4000</code>, i.e. <code>0x40000</code>): at most <code>SYSSIZE</code>=0x3000 paragraphs = 192 KB. This kernel is about 107 KB. It is the longest part to follow with <code>si</code> (one <code>int 0x13</code> runs tens of thousands of BIOS instructions).</p>
+    <div class="gdb">gdb: to skip it, <code>hbreak *0x9006c</code> → <code>continue</code></div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>Motor off, root device, jump to setup</h3><span class="chip rm">real mode</span><span class="where">kill_motor:110 · root_defined:131 · jmpi:139</span></div>
+    <p>Stops the floppy motor (<code>kill_motor</code>) and checks <code>root_dev</code> at byte 508. <code>ROOT_DEV = 0x306</code> in the source is overwritten at build time: <code>tools/build.c</code> reads the device number of <code>ROOT_DEV=/dev/hd1</code> and writes <code>0x0301</code> (hd1, partition 1 of the first hard disk). If it is 0, the floppy type is chosen from the sector count (15→<code>0x208</code>, 18→<code>0x21c</code>). Finally <code>jmpi 0,SETUPSEG</code> (<code>cs=0x9020</code>) hands over to setup.</p>
+    <div class="gdb">This is all of <b>disk → RAM loading</b>, possible because we are still in real mode with the BIOS. gdb: <code>x/1xh 0x901fc</code> → <code>0x0301</code></div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>setup collects hardware information</h3><span class="chip rm">real mode</span><span class="where">boot/setup.s:31–105</span></div>
+    <p>The last step that uses the BIOS. It reads <code>int 0x10</code> (cursor position, video mode, EGA info), <code>int 0x15</code> AH=0x88 (extended memory above 1 MB, in KB), the hard disk parameter tables pointed to by the <code>int 0x41</code>/<code>0x46</code> vectors, and <code>int 0x13</code> AH=0x15 (is there a second disk), and stores them at <code>0x90000~0x901FF</code>, where bootsect used to be. See the table in the <a href="#memory">memory map</a>.</p>
+    <div class="gdb">gdb: <code>hbreak *0x90200</code>. It shows <code>SIGTRAP</code> instead of <code>Breakpoint</code>; that is expected</div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>setup moves system to 0x0</h3><span class="chip rm">real mode</span><span class="where">cli:109 · do_move:115 · end_move:130</span></div>
+    <p>First <code>cli</code> disables interrupts. <code>do_move</code> copies <code>0x10000~0x8FFFF</code> to <code>0x0</code>, 64 KB (<code>cx=0x8000</code> words) at a time. This overwrites the BIOS interrupt vector table (<code>0x0~0x3FF</code>), so no BIOS call is possible afterwards.</p>
+    <div class="gdb">gdb: at the start of setup, <code>x/4xb 0x0</code> → <code>53 ff 00 f0</code> (IVT, <code>int 0</code> = <code>f000:ff53</code>). At startup_32 it reads <code>b8 10 00 00</code> (<code>mov $0x10,%eax</code>, kernel code)</div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>setup prepares protected mode</h3><span class="chip rm">real mode</span><span class="where">lidt:133 · lgdt:134 · A20:139–142 · 8259:154–</span></div>
+    <p>① <code>lidt</code> loads an empty IDT (limit 0) and <code>lgdt</code> a temporary GDT (null, code <code>0x08</code>, data <code>0x10</code>); code and data both have base=0, limit=8 MB, 32-bit (<code>gdt:205</code>). ② <code>0xD1</code> and <code>0xDF</code> sent to the 8042 keyboard controller turn on <b>A20</b>, so addresses above 1 MB work. ③ The 8259A <b>PIC</b>s are reprogrammed to put hardware interrupts at <code>0x20~0x2F</code> (clear of CPU exceptions 0~0x1F), all masked for now.</p>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>Turn on PE and far-jump</h3><span class="chip rm">→</span><span class="chip pm">protected mode</span><span class="where">setup.s:192 · :193</span></div>
+    <p><code>mov ax,#0x0001</code> + <code>lmsw ax</code> (a 286 instruction writing the low 16 bits of CR0, PE=1), immediately followed by <code>jmpi 0,8</code>. The far jump <b>reloads CS from the GDT code descriptor (selector 0x08)</b> and flushes the prefetch queue. From that moment the CPU reads the same bytes as 32-bit code and runs <code>EIP=0</code>, i.e. <code>startup_32</code>. The boot loader's job ends here.</p>
+    <div class="gdb">gdb: <code>hbreak *0x90301</code> (lmsw), <code>hbreak *0x90304</code> (jmpi). Between the two PE is 1 but CS still holds the real-mode value (<code>0x9020</code>), so the code is <b>still 16-bit</b>. That is why d16 checks CS as well.</div>
+  </li>
+  <li class="step pm">
+    <div class="head"><h3>head: startup_32 sets up the kernel environment</h3><span class="chip pm">protected mode</span><span class="where">boot/head.s:17–48</span></div>
+    <p><code>ds/es/fs/gs</code>=0x10 (data selector); <code>lss _stack_start,%esp</code> puts the stack at the end of <code>user_stack</code> (<code>kernel/sched.c</code>); <code>setup_idt</code> points all 256 vectors at <code>ignore_int</code> (which prints <code>Unknown interrupt</code>); <code>setup_gdt</code> installs the kernel's GDT. Then it checks that A20 is really on (if a value written at <code>0x000000</code> shows up at <code>0x100000</code>, it is not; lines 33–36) and whether an x87 coprocessor exists (<code>check_x87:54</code>).</p>
+    <div class="gdb">gdb: <code>hbreak *0x0</code>. When it stops, d16 switches to 32-bit and the <code>tools/system</code> symbols by itself</div>
+  </li>
+  <li class="step pm">
+    <div class="head"><h3>head: paging on, ret into main</h3><span class="chip pm">protected mode</span><span class="where">after_page_tables:135 · setup_paging:198–219</span></div>
+    <p><code>after_page_tables</code> pushes main's three arguments (0), the return address <code>L6</code>, and the address of <code>main</code>. <code>setup_paging</code> maps 0~16 MB 1:1 with <code>pg0~pg3</code> (<code>0x1000~0x4FFF</code>), loads the page directory (<code>pg_dir</code>, address 0) into <code>cr3</code> and sets <code>CR0.PG</code>. The final <code>ret</code> jumps to the <code>main</code> address on the stack. It uses <code>ret</code> rather than <code>jmp main</code> to flush the prefetch queue right after enabling paging (source comment: <i>this also flushes prefetch-queue</i>).</p>
+    <div class="gdb">The page tables are filled backwards with <code>std</code> (<i>fill pages backwards</i>). The original then enters main with the direction flag (DF) still set; this repository adds one <code>cld</code> right after (head.s:213), because gcc 4.8 code assumes DF=0 (<a href="#qa">Q7</a>).</div>
+  </li>
+  <li class="step pm">
+    <div class="head"><h3>main(): kernel initialisation</h3><span class="chip pm">protected mode</span><span class="where">init/main.c:104–149</span></div>
+    <p>Reads what setup left at <code>0x901FC</code> (root device), <code>0x90080</code> (disk info) and <code>0x90002</code> (extended memory) to size memory; with 16 MB, <code>memory_end</code>=<code>0xFE0000</code> and the buffer cache goes up to 4 MB. Then <code>mem_init</code> → <code>trap_init</code> → <code>blk_dev_init</code> → <code>chr_dev_init</code> → <code>tty_init</code> → <code>time_init</code> → <code>sched_init</code> → <code>buffer_init</code> → <code>hd_init</code> → <code>floppy_init</code>, and <code>sti()</code> (136) enables interrupts. <code>move_to_user_mode()</code> (137) drops task 0 to user mode, and after <code>fork</code> the child (task 1) runs <code>init()</code>. Task 0 stays in <code>for(;;) pause();</code>.</p>
+    <p><code>fork()</code> and <code>pause()</code> must be <b>inlined</b> into main, not called (main.c comment: <i>so that there won't be any messing with the stack from main()</i>). A fork from kernel space gets no copy-on-write until execve, so task 0 and task 1 share the stack (comment at main.c lines 10–16); a function call from main after fork would overwrite it and break the child. The original Makefile's <code>-O</code> does the inlining, and the disassembly confirms both <code>int $0x80</code> are inside main.</p>
+    <div class="gdb">gdb: <code>hbreak main</code> → <code>main () at init/main.c:105</code></div>
+  </li>
+  <li class="step pm">
+    <div class="head"><h3>init: read the hard disk partitions</h3><span class="chip pm">protected mode</span><span class="where">main.c:172 setup() → kernel/blk_drv/hd.c:73 sys_setup</span></div>
+    <p><code>init()</code> calls the <code>setup()</code> system call; the kernel's <code>sys_setup</code> configures the drives from the disk info setup.s saved and reads the partition table with the kernel's own driver (<code>hd.c</code>). From here on the kernel, not the BIOS, reads the disk.</p>
+    <p>The original soft-resets the IDE controller on the first request and waits for the READY bit of the status register before sending a command. In QEMU, SeaBIOS leaves the (absent) slave selected, so the status reads 0x00, and READY is not set after the reset either: the kernel panics with <code>HD controller not ready</code>. This repository therefore skips the reset at boot (<code>reset = 0</code>) and waits only for BUSY to clear: two lines.</p>
+    <div class="msg"><span class="lbl">screen</span>Partition table ok.</div>
+    <div class="gdb">Without the hard disk image this fails with <code>harddisk I/O error</code>. gdb: <code>hbreak sys_setup</code></div>
+  </li>
+  <li class="step pm">
+    <div class="head"><h3>init: mount the root file system</h3><span class="chip pm">protected mode</span><span class="where">hd.c:159 → fs/super.c:242 mount_root</span></div>
+    <p>Reads the superblock of <code>ROOT_DEV</code> (0x0301), mounts it as root, and counts the free blocks and inodes. On failure it stops with <code>panic("Unable to mount root")</code> (super.c:262).</p>
+    <div class="msg"><span class="lbl">screen</span>46081/60000 free blocks
+19232/20000 free inodes</div>
+  </li>
+  <li class="step pm">
+    <div class="head"><h3>init: open the console, print memory info</h3><span class="chip pm">protected mode</span><span class="where">init/main.c:173–178</span></div>
+    <p>Opens <code>/dev/tty0</code> as standard input/output/error (0, 1, 2) and prints the buffer cache and free main memory. This is not <code>printk</code> but a user-mode <code>printf</code> → <code>write</code> system call. <code>Free mem</code> = <code>0xFE0000 − 0x400000</code> = 12451840.</p>
+    <div class="msg"><span class="lbl">screen</span>3466 buffers = 3549184 bytes buffer space
+Free mem: 12451840 bytes</div>
+  </li>
+  <li class="step us">
+    <div class="head"><h3>Run /etc/rc</h3><span class="chip us">program on the disk image</span><span class="where">main.c:179–187 → /etc/rc in hdc-0.11.img</span></div>
+    <p>A forked child redirects standard input to <code>/etc/rc</code> and runs <code>/bin/sh</code>. <code>/etc/rc</code> is a script on the disk image, not kernel source: <code>/etc/update &amp;</code>, <code>echo "/dev/hd1 /" &gt; /etc/mtab</code>, <code>echo " Ok. "</code>.</p>
+    <div class="msg"><span class="lbl">screen</span> Ok.</div>
+  </li>
+  <li class="step us">
+    <div class="head"><h3>Login shell</h3><span class="chip us">program on the disk image</span><span class="where">main.c:189–207</span></div>
+    <p>init loops forever: <code>fork</code> → <code>setsid</code> → open <code>/dev/tty0</code> → <code>execve("/bin/sh")</code> (<code>HOME=/usr/root</code>). When the shell exits it prints <code>child N died with code ...</code> and starts another.</p>
+    <div class="msg"><span class="lbl">screen</span>[/usr/root]# _</div>
+  </li>
+</ol>
+
+<h2 id="memory">3. Memory map</h2>
+<p class="sub">Values checked with gdb in QEMU <code>-m 16M</code>. Type the commands in the "check" column into gdb to see the same values.</p>
+
+<h3 style="margin-top:20px">The 1 MB real-mode space and the BIOS</h3>
+<p>Real mode can address only 1 MB (<code>0x00000~0xFFFFF</code>). The BIOS uses <b>the very bottom (IVT, BDA)</b>, <b>just below 640 KB (EBDA)</b> and <b>above 640 KB (ROMs)</b>. In short: system BIOS code at <code>0xF0000~0xFFFFF</code> (64 KB), VGA BIOS at <code>0xC0000~0xCAFFF</code>, BIOS data at <code>0x0~0x4FF</code> and <code>0x9FC00~0x9FFFF</code>.</p>
+<div class="tbl">
+<table>
+  <thead><tr><th>Address</th><th>Size</th><th>What</th><th>Check (stopped at 0x7c00)</th></tr></thead>
+  <tbody>
+    <tr><td class="rmc"><code>0x00000~0x003FF</code></td><td>1 KB</td><td>IVT (interrupt vector table): 256 × 4 bytes (offset, segment). The vector of <code>int N</code> is at <code>N*4</code></td><td><code>x/2xh 0x4c</code> → <code>0xe3fe 0xf000</code> (<code>int 0x13</code> → system BIOS)<br><code>x/2xh 0x40</code> → <code>0x5606 0xc000</code> (<code>int 0x10</code> → VGA BIOS)</td></tr>
+    <tr><td class="rmc"><code>0x00400~0x004FF</code></td><td>256 B</td><td>BDA (BIOS data area)</td><td><code>x/1dh 0x413</code> → <code>639</code> (base memory, KB)<br><code>x/1xh 0x40e</code> → <code>0x9fc0</code> (EBDA segment)</td></tr>
+    <tr><td><code>0x00500~0x07BFF</code></td><td></td><td>free</td><td></td></tr>
+    <tr><td class="rmc"><code>0x07C00~0x07DFF</code></td><td>512 B</td><td>The boot sector loaded by the BIOS</td><td><code>x/2xb 0x7dfe</code> → <code>0x55 0xaa</code></td></tr>
+    <tr><td><code>0x07E00~0x9FBFF</code></td><td></td><td>free; Linux uses <code>0x10000</code> (system) and <code>0x90000</code> (bootsect, setup, stack)</td><td></td></tr>
+    <tr><td class="rmc"><code>0x9FC00~0x9FFFF</code></td><td>1 KB</td><td>EBDA (extended BIOS data area); the 639 KB of base memory end here</td><td>BDA value at <code>0x40E</code> × 16</td></tr>
+    <tr><td><code>0xA0000~0xBFFFF</code></td><td>128 KB</td><td>Video memory; the text screen is at <code>0xB8000</code> (character, attribute: 2 bytes each)</td><td><code>x/8xb 0xb8000</code></td></tr>
+    <tr><td class="rmc"><code>0xC0000~0xCAFFF</code></td><td>44 KB</td><td>VGA BIOS ROM (<code>int 0x10</code>)</td><td></td></tr>
+    <tr><td class="rmc"><code>0xCE000~0xE3FFF</code></td><td></td><td>Option ROM (iPXE network boot)</td><td></td></tr>
+    <tr><td class="rmc"><code>0xF0000~0xFFFFF</code></td><td>64 KB</td><td><b>System BIOS ROM (SeaBIOS)</b>; the reset vector <code>0xFFFF0</code> is at its end</td><td><code>info registers cs eip</code> right after attaching</td></tr>
+    <tr><td><code>0x100000~0xFFFFFF</code></td><td>15 MB</td><td>Extended memory; needs A20</td><td></td></tr>
+    <tr><td><code>0xFFFC0000~0xFFFFFFFF</code></td><td>256 KB</td><td>Where the BIOS ROM really sits (top of 4 GB); the <code>0xF0000</code> range is a copy</td><td></td></tr>
+  </tbody>
+</table>
+</div>
+<p>gdb shows QEMU's actual map with <code>monitor info mtree -f</code>. The output is long; of the several <code>FlatView</code>s, the one with <code>AS "memory"</code> is what the CPU sees.</p>
+<pre><code>0000000000000000-000000000009ffff (prio 0, ram): pc.ram
+00000000000a0000-00000000000bffff (prio 1, i/o): vga-lowmem
+00000000000c0000-00000000000cafff (prio 0, rom): pc.ram @00000000000c0000
+00000000000f0000-00000000000fffff (prio 0, rom): pc.ram @00000000000f0000
+0000000000100000-0000000000ffffff (prio 0, ram): pc.ram @0000000000100000
+00000000fffc0000-00000000ffffffff (prio 0, rom): pc.bios</code></pre>
+
+<h3 style="margin-top:20px">What setup leaves at 0x90000</h3>
+<p>setup reuses the place where bootsect (512 B) was as a store for BIOS information. main cannot call the BIOS in protected mode, so it reads them here (<code>EXT_MEM_K</code>, <code>DRIVE_INFO</code>, <code>ORIG_ROOT_DEV</code> in <code>init/main.c</code>).</p>
+<div class="tbl">
+<table>
+  <thead><tr><th>Address</th><th>Size</th><th>What</th><th>Check (after <code>hbreak *0x0</code>)</th></tr></thead>
+  <tbody>
+    <tr><td><code>0x90000</code></td><td>2 B</td><td>Cursor position (<code>int 0x10</code> AH=3); high byte = row</td><td><code>x/1xh 0x90000</code> → <code>0x0b00</code> (row 11, column 0 = the line after <code>Loading system ...</code>)</td></tr>
+    <tr><td><code>0x90002</code></td><td>2 B</td><td>Extended memory in KB (<code>int 0x15</code> AH=0x88)</td><td><code>x/1dh 0x90002</code> → <code>15232</code></td></tr>
+    <tr><td><code>0x90004</code></td><td>2 B</td><td>Video page</td><td></td></tr>
+    <tr><td><code>0x90006</code></td><td>2 B</td><td>Video mode, screen width</td><td></td></tr>
+    <tr><td><code>0x90008~0x9000D</code></td><td>6 B</td><td>EGA/VGA info</td><td></td></tr>
+    <tr><td><code>0x90080</code></td><td>16 B</td><td>Hard disk 0 parameters (the table the <code>int 0x41</code> vector points to)</td><td><code>x/16xb 0x90080</code></td></tr>
+    <tr><td><code>0x90090</code></td><td>16 B</td><td>Hard disk 1 parameters (0 if none)</td><td></td></tr>
+    <tr><td><code>0x901FC</code></td><td>2 B</td><td>Root device (byte 508 of bootsect)</td><td><code>x/1xh 0x901fc</code> → <code>0x0301</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3 style="margin-top:20px">After the kernel is up (16 MB)</h3>
+<div class="tbl">
+<table>
+  <thead><tr><th>Address</th><th>What</th><th>Source</th></tr></thead>
+  <tbody>
+    <tr><td class="pmc"><code>0x00000~0x00FFF</code></td><td>Page directory (<code>pg_dir</code>), reusing the place of the early head.s code</td><td><code>System.map</code> (names carry a leading <code>_</code>, e.g. <code>_pg_dir</code>, <code>_main</code>; gdb uses them without it)</td></tr>
+    <tr><td class="pmc"><code>0x01000~0x04FFF</code></td><td>Four page tables (<code>pg0~pg3</code>), 4 MB each, 16 MB in total</td><td></td></tr>
+    <tr><td class="pmc"><code>0x05000~0x053FF</code></td><td><code>tmp_floppy_area</code> (1 KB floppy DMA buffer)</td><td></td></tr>
+    <tr><td class="pmc"><code>0x054B8</code> / <code>0x05CB8</code></td><td><code>idt</code> / <code>gdt</code> (2 KB each)</td><td></td></tr>
+    <tr><td class="pmc"><code>0x06757</code></td><td><code>main</code></td><td></td></tr>
+    <tr><td class="pmc"><code>~0x1EECC</code></td><td>End of the kernel (<code>_end</code>); about 123 KB in all</td><td></td></tr>
+    <tr><td><code>_end~0x3FFFFF</code></td><td>Buffer cache; skips <code>0xA0000~0xFFFFF</code> (the video/BIOS hole)</td><td><code>buffer_memory_end</code> = 4 MB, <code>fs/buffer.c:374</code></td></tr>
+    <tr><td><code>0x400000~0xFDFFFF</code></td><td>Main memory, handed out to processes in 4 KB pages</td><td><code>Free mem: 12451840</code></td></tr>
+  </tbody>
+</table>
+</div>
+<p><code>memory_end</code> = 1 MB + 15232 KB = <code>0xFE0000</code>. It is a little short of 16 MB because QEMU/the BIOS reserve a bit at the top.</p>
+
+<h2 id="messages">4. Where am I? Screen messages</h2>
+<p class="sub">The last message on screen tells you which step it stopped at.</p>
+<div class="tbl">
+<table>
+  <thead><tr><th>Last message seen</th><th>Printed by</th><th>If it stops after it</th></tr></thead>
+  <tbody>
+    <tr><td><code>Booting from Floppy...</code></td><td>BIOS</td><td>The boot sector could not be read or lacks <code>55 AA</code> (<code>Image</code> problem)</td></tr>
+    <tr><td><code>Loading system ...</code></td><td><code>bootsect.s:96–102</code></td><td>Somewhere in kernel loading, setup, head or early main. <b>Nothing is printed there</b>, so use gdb</td></tr>
+    <tr><td><code>harddisk I/O error</code>, then <code>Kernel panic: Unable to mount root</code></td><td><code>hd.c</code>, <code>super.c:262</code></td><td>No hard disk image attached, or the root device (<code>0x901FC</code>) does not match the disk</td></tr>
+    <tr><td><code>Partition table ok.</code></td><td><code>hd.c:157</code></td><td>Root mount failed</td></tr>
+    <tr><td><code>... free blocks</code> / <code>... free inodes</code></td><td><code>super.c:274, 280</code></td><td>Opening the console failed</td></tr>
+    <tr><td><code>Free mem: ... bytes</code></td><td><code>main.c:178</code></td><td><code>/etc/rc</code> or <code>/bin/sh</code> failed to run</td></tr>
+    <tr><td><code>Ok.</code></td><td><code>/etc/rc</code> on the disk</td><td>The login shell failed to run</td></tr>
+    <tr><td><code>[/usr/root]#</code></td><td><code>/bin/sh</code></td><td>Booted normally</td></tr>
+  </tbody>
+</table>
+</div>
+<p>Every kernel message goes through <code>printk</code>. With breakpoints on <code>printk</code> and <code>panic</code> after the switch to protected mode, every stop shows the message text (<code>fmt=</code>) and <code>bt</code> shows who printed it.</p>
+<pre><code>(gdb) hbreak *0x0           # startup_32; d16 loads the tools/system symbols
+(gdb) continue
+(gdb) hbreak printk
+(gdb) hbreak panic
+(gdb) continue
+Breakpoint 4, printk (fmt=0x13aec "Partition table%s ok.\n\r") at printk.c:22
+(gdb) bt 3
+#0  printk (fmt=0x13aec "Partition table%s ok.\n\r") at printk.c:22
+#1  0x000100f4 in sys_setup (BIOS=&lt;optimized out&gt;) at hd.c:157
+#2  0x0000719d in _system_call ()
+(gdb) continue
+Breakpoint 4, printk (fmt=0x13478 "%d/%d free blocks\n\r") at printk.c:22
+(gdb) bt 3
+#1  0x0000b7a7 in mount_root () at super.c:274
+#2  0x000100fe in sys_setup (BIOS=&lt;optimized out&gt;) at hd.c:159</code></pre>
+<p class="note"><code>N buffers ...</code> and <code>Free mem ...</code> come from a user-mode <code>printf</code>, so the <code>printk</code> breakpoint does not catch them. <code>Ok.</code> and the prompt are printed by programs on the disk image.</p>
+
+<h2 id="concepts">5. Key concepts</h2>
+<p class="sub">Only what is needed to follow the steps above.</p>
+
+<div class="tbl">
+<table>
+  <thead><tr><th></th><th>Real mode</th><th>Protected mode</th></tr></thead>
+  <tbody>
+    <tr><th>Default width</th><td class="rmc">16-bit</td><td class="pmc">32-bit (when the code descriptor has D=1)</td></tr>
+    <tr><th>Addressing</th><td class="rmc"><code>segment × 16 + offset</code>, up to 1 MB</td><td class="pmc">Segment registers hold GDT indexes (selectors); <code>descriptor base + offset</code>, up to 4 GB</td></tr>
+    <tr><th>BIOS interrupts</th><td class="rmc">available (int 0x10/0x13/0x15)</td><td class="pmc">not available; the kernel needs its own drivers</td></tr>
+    <tr><th>Protection, paging</th><td class="rmc">none</td><td class="pmc">privilege levels (ring 0~3), paging</td></tr>
+    <tr><th>In this project</th><td class="rmc">bootsect.s, setup.s</td><td class="pmc">head.s, main.c and everything after</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3>Segment:offset</h3>
+    <p>The linear address in real mode is <code>cs*16 + ip</code>. gdb's <code>$pc</code> shows only ip, so it looks small, like <code>0x104</code>.</p>
+    <p>Example: <code>9020:0104</code> → <code>0x90200 + 0x104</code> = <code>0x90304</code>, the real address of setup's <code>jmpi 0,8</code>.</p>
+  </div>
+  <div class="card">
+    <h3>BIOS interrupts and loading</h3>
+    <p>Disk reads (<code>int 0x13</code>) are provided by the BIOS for real mode. Protected mode cannot call BIOS code as it is, so <b>loading must be done before the switch</b>. After the switch, the kernel's <code>hd.c</code> and <code>floppy.c</code> access the disks.</p>
+  </div>
+  <div class="card">
+    <h3>GDT and selectors</h3>
+    <p>In protected mode, values like <code>cs</code> and <code>ds</code> are not addresses but <b>GDT entry numbers</b>. setup's GDT has three entries: null (0x00), code (<code>0x08</code>), data (<code>0x10</code>), both with base=0, limit=8 MB, 32-bit. So linear address = offset, which keeps things simple. The 8 in <code>jmpi 0,8</code> is the code selector.</p>
+  </div>
+  <div class="card">
+    <h3>The PE bit and the far jump</h3>
+    <p>Setting CR0.PE starts protected mode, but <b>CS keeps its cached value</b>. A far jump reloads CS with the new selector so the 32-bit code segment takes effect. That is why <code>jmpi</code> comes right after <code>lmsw ax</code>. The original uses the 286-era <code>lmsw</code> (write the low 16 bits of CR0) rather than <code>mov cr0,eax</code>.</p>
+  </div>
+  <div class="card">
+    <h3>A20 and the PIC</h3>
+    <p><b>A20</b>: the 21st address line, held low for 8086 compatibility. Unless it is enabled, memory above 1 MB wraps around to 0. The original enables it through the 8042 keyboard controller. <b>PIC reprogramming</b>: moves IRQ numbers to 0x20 and up so they do not collide with CPU exception numbers.</p>
+  </div>
+  <div class="card">
+    <h3>Paging (in head)</h3>
+    <p>Four page tables, <code>pg0~pg3</code>, map 0~16 MB 1:1 (virtual = physical). Loading <code>pg_dir</code> (address 0) into <code>cr3</code> and setting <code>CR0.PG</code> turns paging on. The page directory sits at address 0 because it reuses the place of head's early code, which is no longer needed.</p>
+  </div>
+  <div class="card">
+    <h3>Why two assemblers</h3>
+    <p><code>bootsect.s</code> and <code>setup.s</code> are the 1991 originals in <b>as86</b> syntax (<code>mov ax,#BOOTSEG</code>, <code>!</code> comments), assembled with <code>as86 -0</code> (8086, 16-bit). <code>ld86</code> produces files with a 32-byte minix header; the original <code>tools/build.c</code> strips it and concatenates bootsect (512 B) + setup (4 sectors) + system into <code>Image</code>. The kernel side (<code>head.s</code>, <code>system_call.s</code>, ...) is assembled by <b>GNU as</b> (AT&amp;T syntax, <code>as --32</code>) into 32-bit ELF. The original Linux 0.11 was organised the same way (with a.out instead of ELF). a.out C symbols carried a leading <code>_</code> (<code>main</code> → <code>_main</code>), so the original <code>.s</code> files refer to <code>_main</code>, <code>_schedule</code>, ... Today gcc gets <code>-fleading-underscore</code> to produce the same names, and the original <code>.s</code> files are used unchanged. Thanks to the debug info, gdb takes the names without <code>_</code> (<code>hbreak main</code>).</p>
+  </div>
+  <div class="card">
+    <h3>Assembly and machine code</h3>
+    <p>16/32-bit is <b>an instruction to the assembler</b> and leaves no trace in the binary. The same <code>mov ax,#0x07c0</code> is <code>B8 C0 07</code> in 16-bit code and <code>66 B8 C0 07</code> in 32-bit code (<code>0x66</code> is the prefix that flips the operand size). The CPU sees only bytes; the current mode decides how they are read. If the assembler setting and the CPU's actual mode disagree, instruction lengths differ, every following byte is misread, and it fails silently, without any error.</p>
+  </div>
+</div>
+
+<h2 id="qa">6. Questions and answers</h2>
+<p class="sub">Questions that came up while working on this.</p>
+
+<div class="qa">
+  <div class="q">Q1. When d16 decodes, how does it tell machine code from assembly?</div>
+  <div class="a">
+    <p><b>It does not.</b> Machine code carries no mode marker, and assembly is gone once assembled. <code>d16</code> is not kernel code but a debugging command that runs inside gdb (<code>scripts/d16.py</code>).</p>
+    <ul>
+      <li>It reads the bytes at the current position from QEMU's memory and disassembles them as 16-bit with <code>objdump -m i8086</code>.</li>
+      <li>The detour is needed because gdb decodes <code>x/i</code> as 32-bit even after <code>set architecture i8086</code>. A <code>layout asm</code> full of <code>add BYTE PTR [eax],al</code> is the symptom.</li>
+      <li>The mode is chosen from the CPU state (CR0.PE and CS), automatically.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q2. I cannot tell where in the source the current instruction is.</div>
+  <div class="a">
+    <p><code>output/bootsect.elf</code> only wraps the finished binary in ELF, so it has no debug info (line table); gdb shows just <code>in ?? ()</code>.</p>
+    <p>Instead, the <b>listings</b> made by <code>as86 -l</code> (<code>output/bootsect.lst</code>, <code>output/setup.lst</code>) map <code>line / offset / machine code / source</code> one to one. Addresses follow the table below; <code>d16</code> applies it automatically and appends lines like <code>; bootsect.s:47  mov ax,#BOOTSEG</code>.</p>
+    <div class="tbl">
+    <table>
+      <thead><tr><th>Part</th><th>Address</th><th>Because of</th></tr></thead>
+      <tbody>
+        <tr><td>bootsect (before moving)</td><td><code>0x7c00 + offset</code></td><td>loaded by the BIOS</td></tr>
+        <tr><td>bootsect (after moving)</td><td><code>0x90000 + offset</code></td><td><code>jmpi go,INITSEG</code> (bootsect.s:56)</td></tr>
+        <tr><td>setup</td><td><code>0x90200 + offset</code> (cs=0x9020)</td><td><code>jmpi 0,SETUPSEG</code> (bootsect.s:139)</td></tr>
+        <tr><td>head (startup_32)</td><td><code>0x0</code></td><td><code>jmpi 0,8</code> (setup.s:193)</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q3. After the switch to protected mode the code is 32-bit, so d16 would be wrong. How do I check it?</div>
+  <div class="a">
+    <p>That is why <code>d16</code> treats <b>CR0.PE=1 with CS holding a GDT selector (a small value)</b> as protected mode, switches with <code>set architecture i386</code> and <code>symbol-file tools/system</code>, and uses plain <code>x/i</code>. Just pressing <code>stepi</code> follows the switch.</p>
+    <p>Why CS too: between <code>lmsw ax</code> and <code>jmpi 0,8</code>, PE is 1 but CS still holds the real-mode value, so the code is still 16-bit. After the switch, <code>list</code> shows lines of <code>head.s</code> and <code>main.c</code>.</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q4. Does the boot loader enter protected mode? Is the OS loaded into RAM after that?</div>
+  <div class="a">
+    <p>Entering protected mode is indeed <b>the boot loader's (setup's) last job</b>, but <b>the order is the other way round</b>: loading from disk into RAM comes first, done in real mode with the BIOS; then setup switches modes.</p>
+    <ul>
+      <li>The boot loader is <b>bootsect + setup</b>. Its job: "load the kernel into RAM, turn on protected mode, jump to the entry point".</li>
+      <li>From <code>head.s</code> on it is the kernel (system). The single line <code>jmpi 0,8</code> is the border.</li>
+      <li>Disk access after protected mode (the root file system, ...) is done by kernel drivers.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q5. I got tired of <code>si</code>, used <code>continue</code>, and got <code>Kernel panic: Unable to mount root</code>. Did it never leave the boot loader?</div>
+  <div class="a">
+    <p>No. If kernel messages appear after <code>Loading system ...</code>, it went through bootsect → setup → head → main. The hard disk image with the root file system was not attached to QEMU, so it stopped at the root mount (step 16 above). <code>scripts/qemu-debug.sh boot</code> now attaches <code>output/hdc-0.11.img</code> when it exists, so <code>continue</code> reaches the shell.</p>
+    <p><code>continue</code> runs to the next breakpoint, so it is fine to use. Instead of <code>si 50000</code>, put an <code>hbreak</code> where you want to look and <code>continue</code> (<a href="#gdb">table below</a>).</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q6. VSCode works down to main; why not for the boot loader?</div>
+  <div class="a">
+    <p>In the boot sector, VSCode (cppdbg) reads gdb's stopped state as "running", so <code>stepi</code> does not work. Debug with two WSL terminals instead (<code>bootloader_terminal1.sh</code>: QEMU, <code>bootloader_terminal2.sh</code>: gdb). From protected mode on (<code>startup_32</code>~<code>main</code>) the VSCode configuration works.</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q7. Why does the original source not build as it is? What was changed?</div>
+  <div class="a">
+    <p>The original targets <b>gcc 1.x</b> and a.out (1991); the build environment (Ubuntu 14.04) has only <b>gcc 4.8</b>. Nothing was changed for optimization: only what is strictly needed to build with today's compiler and run correctly. 26 files differ from the original; <code>diff -r linux-0.11-original . -x linux-0.11-original -x .git</code> shows them all.</p>
+    <ul>
+      <li><b>Compile errors:</b> inline asm listing an input register as clobbered (<code>impossible constraints</code> since gcc 3), a cast used as an lvalue, a bare <code>#elif</code>, <code>xorl %al,%al</code>, <code>.align 3</code> (2³ bytes in a.out, 3 bytes in ELF), <code>"r"</code> constraints on byte values (giving <code>%sil</code>).</li>
+      <li><b>No error, wrong behaviour:</b> gcc 4.8 assumes "DF=0 at function boundaries" and compiles struct copies to <code>rep movsl</code>. The original leaves DF set after <code>std</code>, so fork's <code>*p = *current</code> right after <code>get_free_page()</code> copied backwards. Task 1's <code>priority</code> became 0 and the scheduler never picked init. Fixed by a <code>cld</code> at the end of the four places that use <code>std</code>.</li>
+      <li><b>a.out symbols:</b> the original <code>.s</code> files call C symbols <code>_main</code> and so on. Instead of editing them, gcc gets <code>-fleading-underscore</code>.</li>
+      <li><b>Environment:</b> QEMU IDE compatibility (two lines in <code>hd.c</code>, see step 15), a case-insensitive Windows drive (the <code>keyboard.S</code> build rule), and compile options (<code>-m32</code>) plus Makefile glue to use the original <code>build.c</code> unchanged.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q8. The kernel went from 127 KB to 107 KB. Does it behave differently?</div>
+  <div class="a">
+    <p>No. The earlier version lacked <code>-O</code> (optimization) in its compile options; this one uses <code>-O</code> as the original Makefile does. The same C code compiled at the original's optimization level is simply smaller. <code>-O</code> is also what inlines fork/pause (step 14).</p>
+    <p>On the other hand, gdb may show some variables as <code>&lt;optimized out&gt;</code>, and <code>next</code> may jump back and forth between lines. That is normal for optimized code.</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q9. Why was the keyboard layout changed?</div>
+  <div class="a">
+    <p>The original default is Finnish (<code>KBD_FINNISH</code> in <code>include/linux/config.h</code>), so typing on a US/Korean keyboard into the QEMU shell gives <code>-</code> for <code>/</code>, <code>+</code> for <code>-</code> and <code>:</code> for <code>&gt;</code>. <code>KBD_US</code>, already in the original, is enabled and <code>KBD_FINNISH</code> disabled. <code>keyboard.S</code> assembles only the enabled table, so the kernel size is the same; with both enabled, Finnish wins because it is tested first.</p>
+  </div>
+</div>
+
+<h2 id="gdb">7. Checking with gdb</h2>
+<p class="sub">Run from the repository root. Once, build the Image and listings with <code>./build.sh</code> and <code>./build.sh boot</code>.</p>
+
+<pre><code># Terminal 1: QEMU waiting for gdb (output/Image + output/hdc-0.11.img); the QEMU window opens too
+./bootloader_terminal1.sh
+
+# Terminal 2: gdb; stops at 0x7c00 and prints the current instruction and source line at every stop
+./bootloader_terminal2.sh</code></pre>
+
+<div class="tbl">
+<table>
+  <thead><tr><th>Breakpoint</th><th>Where (original source)</th></tr></thead>
+  <tbody>
+    <tr><td class="rmc"><code>hbreak *0x7c00</code></td><td>bootsect start (set by terminal 2)</td></tr>
+    <tr><td class="rmc"><code>hbreak *0x90018</code></td><td><code>go:</code> (right after bootsect moved itself to 0x90000)</td></tr>
+    <tr><td class="rmc"><code>hbreak *0x9003d</code></td><td><code>ok_load_setup:</code> (the four setup sectors were read)</td></tr>
+    <tr><td class="rmc"><code>hbreak *0x9006c</code></td><td><code>call kill_motor</code> (kernel loaded; skips the longest part)</td></tr>
+    <tr><td class="rmc"><code>hbreak *0x90093</code></td><td><code>jmpi 0,SETUPSEG</code> (jump to setup)</td></tr>
+    <tr><td class="rmc"><code>hbreak *0x90200</code></td><td>setup start</td></tr>
+    <tr><td class="rmc"><code>hbreak *0x90301</code> / <code>*0x90304</code></td><td><code>lmsw ax</code> / <code>jmpi 0,8</code></td></tr>
+    <tr><td class="pmc"><code>hbreak *0x0</code></td><td><code>startup_32</code> (head.s)</td></tr>
+    <tr><td class="pmc"><code>hbreak main</code></td><td><code>init/main.c:105</code> (once the symbols are loaded after the switch)</td></tr>
+    <tr><td class="pmc"><code>hbreak sys_setup</code> / <code>printk</code> / <code>panic</code></td><td>start of the root mount / kernel messages / kernel panic</td></tr>
+  </tbody>
+</table>
+</div>
+<p>Addresses are the offset (second column) in <code>output/*.lst</code> plus the load address. They move when the source changes, so look them up in the listing again.</p>
+
+<div class="tbl">
+<table>
+  <thead><tr><th>To see</th><th>How</th></tr></thead>
+  <tbody>
+    <tr><td>Current instruction and source line</td><td><code>stepi</code> (<code>d16 1</code> runs at every stop)</td></tr>
+    <tr><td>The next N instructions</td><td><code>d16 N</code> (mode chosen automatically)</td></tr>
+    <tr><td>Registers</td><td><code>info registers</code>, or <code>layout regs</code> (TUI). Avoid <code>layout asm</code>: it decodes 16-bit code wrongly</td></tr>
+    <tr><td>Memory after loading</td><td><code>x/16xb 0x10000</code> (before the move), <code>x/16xb 0x0</code> (after)</td></tr>
+    <tr><td>QEMU's memory map</td><td><code>monitor info mtree -f</code></td></tr>
+    <tr><td>Finish</td><td><code>quit</code> in gdb → <code>Ctrl+C</code> in terminal 1; kill a leftover QEMU with <code>pkill -f '^qemu-system-i386'</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="note">In setup (<code>cs=0x9020</code>) gdb takes <code>$pc</code> to be ip (e.g. <code>0x104</code>), so a stop at an <code>hbreak</code> on a linear address shows <code>Program received signal SIGTRAP</code> instead of <code>Breakpoint N</code>. That is expected.</p>
+
+<footer>Written against this repository's <code>boot/bootsect.s</code>, <code>boot/setup.s</code> (identical to Linus' original), <code>boot/head.s</code>, <code>init/main.c</code>, <code>kernel/blk_drv/hd.c</code> (original + minimal gcc 4.8/QEMU patches) and <code>scripts/d16.py</code>. Addresses and values were checked in QEMU <code>-m 16M</code>. Line numbers and addresses change when the source changes.</footer>
+</div>
+
+</body>
+</html>

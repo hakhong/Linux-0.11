@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linux 0.11 부팅 해설</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* 레이아웃: 한 칼럼 문서. 위에서 아래로 구상도 → 단계별 과정 → 개념 → 질문과 답 → 치트시트.
+   색은 모드 구분 자체가 정보다: 앰버=리얼모드(16비트), 청록=보호모드(32비트). */
+:root {
+  --bg: #f3f6f8;
+  --surface: #ffffff;
+  --ink: #16212b;
+  --muted: #566676;
+  --line: #d3dbe2;
+  --code-bg: #e8eef3;
+  --rm: #a85208;
+  --rm-bg: #fbecd9;
+  --pm: #0a6a8c;
+  --pm-bg: #d9eff6;
+  --warn: #b3261e;
+  --sans: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1419; --surface: #16202a; --ink: #e5ebf0; --muted: #97a6b4; --line: #2a3743;
+    --code-bg: #1c2833; --rm: #f2a560; --rm-bg: #3a2a17; --pm: #5ec4e4; --pm-bg: #12333f; --warn: #ff8a80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1419; --surface: #16202a; --ink: #e5ebf0; --muted: #97a6b4; --line: #2a3743;
+  --code-bg: #1c2833; --rm: #f2a560; --rm-bg: #3a2a17; --pm: #5ec4e4; --pm-bg: #12333f; --warn: #ff8a80;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.75; }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-size: clamp(26px, 4.4vw, 38px); line-height: 1.25; margin: 0 0 8px; font-weight: 700; text-wrap: balance; }
+h2 { font-size: 22px; margin: 52px 0 6px; font-weight: 700; text-wrap: balance; }
+h3 { font-size: 16px; margin: 0 0 4px; font-weight: 700; }
+p { margin: 8px 0; max-width: 72ch; }
+.lead { color: var(--muted); font-size: 16px; max-width: 70ch; }
+.sub { color: var(--muted); margin: 0 0 18px; }
+code, pre, .mono { font-family: var(--mono); font-size: 0.9em; }
+code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; }
+pre { background: var(--code-bg); padding: 12px 14px; border-radius: 6px; overflow-x: auto; line-height: 1.6; margin: 10px 0; }
+pre code { background: none; padding: 0; }
+.nav { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 18px 0 0; padding: 0; list-style: none; font-size: 14px; }
+.nav a { color: var(--pm); text-decoration: none; border-bottom: 1px solid var(--line); }
+.nav a:hover, .nav a:focus-visible { border-bottom-color: var(--pm); outline: none; }
+.summary { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 18px 10px; margin-top: 26px; }
+.summary ul { margin: 6px 0; padding-left: 20px; }
+.summary li { margin: 4px 0; }
+.chip { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .03em; padding: 1px 9px; border-radius: 99px; white-space: nowrap; line-height: 1.7; }
+.chip.rm { background: var(--rm-bg); color: var(--rm); }
+.chip.pm { background: var(--pm-bg); color: var(--pm); }
+.fig { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin: 14px 0; }
+.fig .scroll { overflow-x: auto; }
+.fig svg { display: block; width: 100%; min-width: 720px; height: auto; }
+figcaption { color: var(--muted); font-size: 13.5px; margin-top: 8px; max-width: 80ch; }
+/* svg tokens */
+.s-ink { fill: var(--ink); } .s-mut { fill: var(--muted); }
+.s-line { stroke: var(--ink); fill: none; stroke-width: 1.5; }
+.s-box-rm { fill: var(--rm-bg); stroke: var(--rm); stroke-width: 1.5; }
+.s-box-pm { fill: var(--pm-bg); stroke: var(--pm); stroke-width: 1.5; }
+.s-box-empty { fill: none; stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.s-t-rm { fill: var(--rm); } .s-t-pm { fill: var(--pm); }
+.s-dash { stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; }
+.s-warn { fill: var(--warn); }
+.s-pm-line { stroke: var(--pm); stroke-width: 1.8; fill: none; }
+svg text { font-family: var(--sans); }
+svg .m { font-family: var(--mono); }
+/* steps */
+.steps { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; counter-reset: step; }
+.step { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 0 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; border-left-width: 4px; }
+.step.rm { border-left-color: var(--rm); } .step.pm { border-left-color: var(--pm); }
+.step::before { counter-increment: step; content: counter(step); font-family: var(--mono); font-weight: 500; font-size: 20px; color: var(--muted); grid-column: 1; grid-row: 1 / span 9; line-height: 1.3; }
+.step > * { grid-column: 2; }
+.step .head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.step .where { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+.step p { margin: 4px 0; }
+.step .gdb { font-size: 13px; color: var(--muted); }
+.boundary { text-align: center; color: var(--warn); font-weight: 700; font-size: 14px; padding: 8px; border: 1.5px dashed var(--warn); border-radius: 8px; background: transparent; }
+/* concept grid */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px 14px; min-width: 0; }
+.card p { margin: 4px 0; font-size: 14.5px; }
+.tbl { overflow-x: auto; margin: 12px 0; }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; background: var(--surface); }
+th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); font-weight: 700; }
+td.rmc { background: var(--rm-bg); } td.pmc { background: var(--pm-bg); }
+/* qa */
+.qa { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; overflow: hidden; }
+.qa .q { padding: 12px 16px; font-weight: 700; border-bottom: 1px solid var(--line); background: var(--code-bg); }
+.qa .a { padding: 8px 16px 12px; }
+.qa .a ul { margin: 6px 0; padding-left: 20px; }
+.note { border-left: 3px solid var(--warn); padding: 4px 12px; margin: 12px 0; color: var(--ink); }
+.msg { font-family: var(--mono); font-size: 13px; background: #0b0f13; color: #d7dde3; padding: 6px 10px; border-radius: 6px; margin: 6px 0 2px; white-space: pre-wrap; }
+.msg .lbl { color: #8aa0b2; font-family: var(--sans); font-size: 12px; margin-right: 8px; }
+.step.us { border-left-color: var(--muted); }
+.chip.us { background: var(--code-bg); color: var(--muted); }
+footer { margin-top: 48px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 14px; }
+@media (max-width: 520px) { .step { grid-template-columns: 28px minmax(0, 1fr); gap: 0 10px; padding: 12px; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <h1>Linux 0.11 부팅: 전원이 켜지고 쉘이 뜨기까지</h1>
+  <p class="lead">BIOS가 부트섹터를 올리는 순간부터 <code>main()</code>을 거쳐 쉘 프롬프트 <code>[/usr/root]#</code>가 뜨기까지, 이 저장소의 소스 기준으로 정리했습니다. 커널 소스는 Linus의 원본(<code>linux-0.11-original/</code>)에 gcc 4.8로 빌드하고 QEMU로 부팅하는 데 꼭 필요한 것만 고친 것이고, <code>bootsect.s</code>·<code>setup.s</code>는 원본과 같습니다. 고친 내용은 README의 "원본과 다른 점"과 아래 <a href="#qa">Q7</a>에 있습니다. 주소와 값은 QEMU(<code>-m 16M</code>)에서 gdb로 실제로 확인한 것입니다.</p>
+  <ul class="nav">
+    <li><a href="boot-guide.en.html" lang="en">English</a></li>
+    <li><a href="#map">전체 구상도</a></li>
+    <li><a href="#steps">단계별 과정</a></li>
+    <li><a href="#memory">메모리 맵</a></li>
+    <li><a href="#messages">화면 메시지</a></li>
+    <li><a href="#concepts">핵심 개념</a></li>
+    <li><a href="#qa">질문과 답</a></li>
+    <li><a href="#gdb">gdb 확인 방법</a></li>
+  </ul>
+  <div class="summary">
+    <h3 style="margin-top:10px">한 줄 요약</h3>
+    <ul>
+      <li>부트로더는 <b>bootsect + setup</b> 두 개이고, <code>setup.s</code>의 <code>jmpi 0,8</code>(193번째 줄)이 부트로더와 커널의 경계입니다.</li>
+      <li><b>디스크에서 RAM으로 올리는 일은 리얼모드에서 먼저</b> 끝냅니다. BIOS 디스크 인터럽트(<code>int 0x13</code>)가 리얼모드 전용이기 때문입니다.</li>
+      <li>그 다음 setup이 보호모드를 켜고, <code>head.s</code>의 <code>startup_32</code>(0번지)부터 32비트 커널이 시작해 <code>main()</code>에 도달합니다.</li>
+      <li><code>main()</code>이 만든 <code>init</code>(task 1)이 하드디스크의 루트 파일시스템을 마운트하고 <code>/bin/sh</code>를 띄웁니다. 루트 마운트부터는 커널 자신의 드라이버(<code>hd.c</code>)로 합니다.</li>
+      <li>기계어에는 16/32비트 표시가 없습니다. 어느 쪽으로 읽을지는 <b>CPU의 현재 모드</b>와 <b>어셈블러/디스어셈블러 설정</b>이 정합니다.</li>
+    </ul>
+  </div>
+</header>
+
+<h2 id="map">1. 전체 구상도</h2>
+<p class="sub">색은 CPU 모드입니다. <span class="chip rm">리얼모드 16비트</span> <span class="chip pm">보호모드 32비트</span></p>
+
+<figure class="fig">
+  <div class="scroll">
+  <svg viewBox="0 0 980 210" role="img" aria-label="부팅 흐름: BIOS, bootsect, setup은 리얼모드, head와 main은 보호모드이며 setup의 jmpi 0,8이 부트로더와 커널의 경계">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="s-ink"/></marker>
+    </defs>
+    <path d="M15 34 V26 H565 V34" class="s-line"/>
+    <text x="290" y="17" text-anchor="middle" font-size="13" font-weight="700" class="s-ink">부트로더 (bootsect.s + setup.s)</text>
+    <path d="M615 34 V26 H965 V34" class="s-line"/>
+    <text x="790" y="17" text-anchor="middle" font-size="13" font-weight="700" class="s-ink">커널 (system = head.s + main.c …)</text>
+
+    <rect x="15" y="60" width="150" height="100" rx="6" class="s-box-rm"/>
+    <text x="90" y="86" text-anchor="middle" font-size="15" font-weight="700" class="s-t-rm">BIOS</text>
+    <text x="90" y="108" text-anchor="middle" font-size="12" class="s-ink">POST 후 부트섹터를</text>
+    <text x="90" y="124" text-anchor="middle" font-size="12" class="s-ink">0x7c00에 읽어 실행</text>
+    <text x="90" y="146" text-anchor="middle" font-size="11" class="s-mut m">f000:fff0 → 0000:7c00</text>
+
+    <rect x="215" y="60" width="150" height="100" rx="6" class="s-box-rm"/>
+    <text x="290" y="86" text-anchor="middle" font-size="15" font-weight="700" class="s-t-rm">bootsect</text>
+    <text x="290" y="108" text-anchor="middle" font-size="12" class="s-ink">0x90000으로 자기 복사</text>
+    <text x="290" y="124" text-anchor="middle" font-size="12" class="s-ink">setup·system을 디스크에서 읽음</text>
+    <text x="290" y="146" text-anchor="middle" font-size="11" class="s-mut m">BIOS int 0x13</text>
+
+    <rect x="415" y="60" width="150" height="100" rx="6" class="s-box-rm"/>
+    <text x="490" y="86" text-anchor="middle" font-size="15" font-weight="700" class="s-t-rm">setup</text>
+    <text x="490" y="108" text-anchor="middle" font-size="12" class="s-ink">HW 정보 수집, system 이동</text>
+    <text x="490" y="124" text-anchor="middle" font-size="12" class="s-ink">GDT·A20·PIC, lmsw로 PE 켜기</text>
+    <text x="490" y="146" text-anchor="middle" font-size="11" class="s-mut m">0x90200</text>
+
+    <rect x="615" y="60" width="150" height="100" rx="6" class="s-box-pm"/>
+    <text x="690" y="86" text-anchor="middle" font-size="15" font-weight="700" class="s-t-pm">head</text>
+    <text x="690" y="108" text-anchor="middle" font-size="12" class="s-ink">세그먼트·IDT·GDT 재설정</text>
+    <text x="690" y="124" text-anchor="middle" font-size="12" class="s-ink">페이징 켜기</text>
+    <text x="690" y="146" text-anchor="middle" font-size="11" class="s-mut m">startup_32 @ 0x0</text>
+
+    <rect x="815" y="60" width="150" height="100" rx="6" class="s-box-pm"/>
+    <text x="890" y="86" text-anchor="middle" font-size="15" font-weight="700" class="s-t-pm">main() → init</text>
+    <text x="890" y="108" text-anchor="middle" font-size="12" class="s-ink">장치·스케줄러 초기화</text>
+    <text x="890" y="124" text-anchor="middle" font-size="12" class="s-ink">루트 마운트 → /bin/sh</text>
+    <text x="890" y="146" text-anchor="middle" font-size="11" class="s-mut m">init/main.c</text>
+
+    <line x1="165" y1="110" x2="213" y2="110" class="s-line" marker-end="url(#ar)"/>
+    <text x="189" y="102" text-anchor="middle" font-size="10" class="s-mut m">jmp</text>
+    <line x1="365" y1="110" x2="413" y2="110" class="s-line" marker-end="url(#ar)"/>
+    <text x="389" y="102" text-anchor="middle" font-size="10" class="s-mut m">jmpi</text>
+    <line x1="565" y1="110" x2="613" y2="110" class="s-pm-line" marker-end="url(#ar)"/>
+    <text x="589" y="102" text-anchor="middle" font-size="10" class="s-mut m">jmpi</text>
+    <line x1="765" y1="110" x2="813" y2="110" class="s-line" marker-end="url(#ar)"/>
+    <text x="789" y="102" text-anchor="middle" font-size="10" class="s-mut m">ret</text>
+    <line x1="590" y1="36" x2="590" y2="192" class="s-dash"/>
+    <text x="590" y="205" text-anchor="middle" font-size="12" font-weight="700" class="s-warn">jmpi 0,8 (setup.s:193): CS가 32비트 코드 세그먼트로 바뀜</text>
+  </svg>
+  </div>
+  <figcaption>부팅은 한 방향으로만 흐릅니다. 부트로더(앞 세 칸)는 전부 리얼모드이고, 점선을 넘는 순간 CPU가 32비트 코드를 실행합니다.</figcaption>
+</figure>
+
+<figure class="fig">
+  <div class="scroll">
+  <svg viewBox="0 0 760 410" role="img" aria-label="메모리 배치: 왼쪽은 bootsect가 적재를 끝낸 시점, 오른쪽은 setup이 system을 0x0으로 옮긴 뒤">
+    <defs>
+      <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="s-ink"/></marker>
+    </defs>
+    <text x="170" y="18" text-anchor="middle" font-size="13" font-weight="700" class="s-ink">bootsect가 적재를 끝낸 시점</text>
+    <text x="590" y="18" text-anchor="middle" font-size="13" font-weight="700" class="s-ink">setup이 system을 옮긴 뒤 (보호모드 진입 직전)</text>
+
+    <rect x="20" y="30" width="300" height="46" rx="4" class="s-box-rm"/>
+    <text x="30" y="50" font-size="12" font-weight="700" class="s-t-rm m">0x90200</text>
+    <text x="30" y="67" font-size="12.5" class="s-ink">setup (4섹터 = 2KB, 실제 312바이트)</text>
+    <rect x="20" y="82" width="300" height="46" rx="4" class="s-box-rm"/>
+    <text x="30" y="102" font-size="12" font-weight="700" class="s-t-rm m">0x90000</text>
+    <text x="30" y="119" font-size="12.5" class="s-ink">bootsect 복사본 (실행 중)</text>
+    <rect x="20" y="134" width="300" height="40" rx="4" class="s-box-empty"/>
+    <text x="170" y="159" text-anchor="middle" font-size="12" class="s-mut">· · · 비어 있음 · · ·</text>
+    <rect x="20" y="180" width="300" height="60" rx="4" class="s-box-rm"/>
+    <text x="30" y="200" font-size="12" font-weight="700" class="s-t-rm m">0x10000</text>
+    <text x="30" y="217" font-size="12.5" class="s-ink">system (head + main … 커널 전체)</text>
+    <text x="30" y="233" font-size="11.5" class="s-mut">최대 SYSSIZE = 0x3000 단락 = 192KB</text>
+    <rect x="20" y="246" width="300" height="40" rx="4" class="s-box-empty"/>
+    <text x="30" y="270" font-size="12" class="s-mut m">0x07c00  bootsect 원본 (이제 불필요)</text>
+    <rect x="20" y="292" width="300" height="46" rx="4" class="s-box-rm"/>
+    <text x="30" y="312" font-size="12" font-weight="700" class="s-t-rm m">0x00000</text>
+    <text x="30" y="329" font-size="12.5" class="s-ink">BIOS 인터럽트 벡터 테이블 (IVT)</text>
+
+    <rect x="440" y="30" width="300" height="46" rx="4" class="s-box-rm"/>
+    <text x="450" y="50" font-size="12" font-weight="700" class="s-t-rm m">0x90200</text>
+    <text x="450" y="67" font-size="12.5" class="s-ink">setup (여기서 lmsw로 PE를 켠다)</text>
+    <rect x="440" y="82" width="300" height="46" rx="4" class="s-box-rm"/>
+    <text x="450" y="100" font-size="12" font-weight="700" class="s-t-rm m">0x90000</text>
+    <text x="450" y="116" font-size="11.5" class="s-ink">수집한 HW 정보 · 0x90002 확장메모리</text>
+    <rect x="440" y="134" width="300" height="40" rx="4" class="s-box-empty"/>
+    <text x="450" y="152" font-size="11.5" class="s-mut m">0x90080 HD 정보 · 0x901FC 루트 장치</text>
+    <text x="450" y="167" font-size="11" class="s-mut">main()이 이 값들을 읽는다</text>
+    <rect x="440" y="180" width="300" height="60" rx="4" class="s-box-empty"/>
+    <text x="590" y="214" text-anchor="middle" font-size="12" class="s-mut">비움 (system이 아래로 내려갔다)</text>
+    <rect x="440" y="246" width="300" height="40" rx="4" class="s-box-empty"/>
+    <text x="450" y="270" font-size="12" class="s-mut m">0x07c00  (쓰이지 않음)</text>
+    <rect x="440" y="292" width="300" height="86" rx="4" class="s-box-pm"/>
+    <text x="450" y="312" font-size="12" font-weight="700" class="s-t-pm m">0x00000</text>
+    <text x="450" y="329" font-size="12.5" class="s-ink">system: pg_dir, startup_32, 커널 전체</text>
+    <text x="450" y="347" font-size="11.5" class="s-warn">IVT를 덮어썼다 → 더 이상 BIOS를 못 쓴다</text>
+    <text x="450" y="365" font-size="11.5" class="s-mut">head.s의 startup_32가 정확히 0x0</text>
+
+    <path d="M320 212 C 380 212, 380 336, 438 336" class="s-pm-line" marker-end="url(#ar2)"/>
+    <text x="378" y="270" text-anchor="middle" font-size="11" class="s-t-pm" transform="rotate(-90 378 270)">do_move: 0x10000 → 0x0</text>
+    <text x="170" y="365" text-anchor="middle" font-size="11.5" class="s-mut">축척 아님. 주소는 선형(물리) 주소.</text>
+  </svg>
+  </div>
+  <figcaption>setup의 <code>do_move</code>가 system을 0x10000에서 0x0으로 64KB씩 복사합니다. 이때 BIOS 인터럽트 벡터가 덮여 사라지므로, 그 전에 BIOS로 필요한 정보를 모두 0x90000 근처에 저장해 둡니다.</figcaption>
+</figure>
+
+<h2 id="steps">2. 쉘까지의 과정, 단계별</h2>
+<p class="sub">위치는 저장소 루트 기준 소스의 파일:줄 번호입니다. 번호는 실제 실행 순서입니다. 검은 상자는 그 단계에서 화면에 찍히는 메시지입니다.</p>
+
+<ol class="steps">
+  <li class="step rm">
+    <div class="head"><h3>CPU 리셋, BIOS 실행</h3><span class="chip rm">리얼모드</span><span class="where">SeaBIOS ROM · 0xF0000~0xFFFFF</span></div>
+    <p>CPU는 리셋 직후 <code>f000:fff0</code>(선형 <code>0xFFFF0</code>)에서 시작합니다. 거기 있는 <code>jmp f000:e05b</code>로 BIOS 본체에 들어가 하드웨어 점검(POST), 인터럽트 벡터 테이블·BIOS 데이터 영역 채우기, VGA BIOS와 iPXE 옵션 ROM 실행을 합니다.</p>
+    <div class="msg"><span class="lbl">화면</span>SeaBIOS (version 1.16.3-...)
+iPXE (https://ipxe.org) ...
+Booting from Floppy...</div>
+    <div class="gdb">gdb: 접속 직후 <code>info registers cs eip</code> → <code>cs=0xf000 eip=0xfff0</code></div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>BIOS가 부트섹터를 0x7c00에 올린다</h3><span class="chip rm">리얼모드</span><span class="where">boot/bootsect.s:252–253</span></div>
+    <p>플로피의 첫 512바이트(<code>Image</code>의 맨 앞 = bootsect)를 <code>0x7c00</code>에 읽고, 마지막 2바이트가 <code>0x55 0xAA</code>(<code>boot_flag: .word 0xAA55</code>)이면 부팅 가능한 섹터로 보고 <code>0000:7c00</code>으로 점프합니다.</p>
+    <div class="gdb">gdb: <code>hbreak *0x7c00</code> 에서 멈춤. <code>x/2xb 0x7dfe</code> → <code>0x55 0xaa</code></div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>bootsect가 자기 자신을 0x90000으로 복사한다</h3><span class="chip rm">리얼모드</span><span class="where">bootsect.s:46–56</span></div>
+    <p><code>0x7c00</code> 근처는 곧 다른 용도로 써야 하므로, <code>mov cx,#256</code> + <code>rep movw</code>로 256워드(512바이트)를 <code>0x9000:0000</code>으로 옮기고 <code>jmpi go,INITSEG</code>로 복사본에서 계속 실행합니다.</p>
+    <div class="gdb">gdb: <code>hbreak *0x90018</code> (<code>go:</code>)</div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>스택을 잡고 setup을 읽는다</h3><span class="chip rm">리얼모드</span><span class="where">go:57 · load_setup:67</span></div>
+    <p><code>ds=es=ss=0x9000</code>, <code>sp=0xFF00</code>(스택 = <code>0x9FF00</code>). BIOS <code>int 0x13</code>(AH=2)로 2번 섹터부터 <code>SETUPLEN</code>=4섹터를 <code>0x90200</code>에 읽습니다. 실패하면 디스크를 리셋(AH=0)하고 다시 읽습니다.</p>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>디스크 정보를 얻고 메시지를 찍는다</h3><span class="chip rm">리얼모드</span><span class="where">ok_load_setup:79 · int 0x10:96,102</span></div>
+    <p><code>int 0x13</code>(AH=8)로 트랙당 섹터 수를 얻어 <code>sectors</code>에 저장합니다(1.44MB 플로피 = 18). 이어서 <code>int 0x10</code>(AH=3 커서 위치, AX=0x1301 문자열 출력)으로 <code>msg1</code>을 찍습니다. 원본 부트로더가 화면에 쓰는 유일한 메시지입니다.</p>
+    <div class="msg"><span class="lbl">화면</span>Loading system ...</div>
+    <div class="gdb">gdb: <code>hbreak *0x9003d</code> (<code>ok_load_setup:</code>)</div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>system(커널)을 0x10000에 읽는다</h3><span class="chip rm">리얼모드</span><span class="where">call read_it:109 · read_it:151 · read_track:198</span></div>
+    <p><code>es=SYSSEG</code>(<code>0x1000</code>)로 두고 <code>read_it</code>이 <code>ENDSEG</code>(<code>0x4000</code>, 즉 <code>0x40000</code>)까지 트랙 단위로 <code>int 0x13</code>을 반복합니다. 최대 <code>SYSSIZE</code>=0x3000 단락=192KB. 지금 커널은 약 107KB입니다. 부팅에서 <code>si</code>로 따라가기 가장 긴 구간입니다(<code>int 0x13</code> 하나 안에서 BIOS 코드가 수만 개 실행됨).</p>
+    <div class="gdb">gdb: 이 구간은 건너뛰려면 <code>hbreak *0x9006c</code> → <code>continue</code></div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>모터를 끄고 루트 장치를 정한 뒤 setup으로 점프</h3><span class="chip rm">리얼모드</span><span class="where">kill_motor:110 · root_defined:131 · jmpi:139</span></div>
+    <p>플로피 모터를 끄고(<code>kill_motor</code>), 508번째 바이트의 <code>root_dev</code>를 확인합니다. 소스의 <code>ROOT_DEV = 0x306</code>은 빌드할 때 <code>tools/build.c</code>가 <code>ROOT_DEV=/dev/hd1</code> 장치 번호를 읽어 <code>0x0301</code>(hd1, 첫 하드디스크의 1번 파티션)로 덮어씁니다. 0이면 섹터 수로 플로피 종류를 골라(15→<code>0x208</code>, 18→<code>0x21c</code>) 정합니다. 마지막으로 <code>jmpi 0,SETUPSEG</code>(<code>cs=0x9020</code>)로 setup에 넘깁니다.</p>
+    <div class="gdb">여기까지가 <b>디스크 → RAM 적재</b>의 전부입니다. 아직 리얼모드이고 BIOS를 쓸 수 있어서 가능합니다. gdb: <code>x/1xh 0x901fc</code> → <code>0x0301</code></div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>setup이 하드웨어 정보를 수집한다</h3><span class="chip rm">리얼모드</span><span class="where">boot/setup.s:31–105</span></div>
+    <p>BIOS를 쓰는 마지막 단계입니다. <code>int 0x10</code>(커서 위치·비디오 모드·EGA 정보), <code>int 0x15</code> AH=0x88(1MB 이후 확장 메모리 KB), <code>int 0x41</code>/<code>0x46</code> 벡터가 가리키는 하드디스크 파라미터 표, <code>int 0x13</code> AH=0x15(두 번째 디스크 유무)를 읽어 bootsect가 있던 <code>0x90000~0x901FF</code>에 저장합니다. 자세한 위치는 <a href="#memory">메모리 맵</a>의 표를 보세요.</p>
+    <div class="gdb">gdb: <code>hbreak *0x90200</code>. 멈추면 <code>Breakpoint</code> 대신 <code>SIGTRAP</code>으로 표시되는 게 정상</div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>setup이 system을 0x0으로 옮긴다</h3><span class="chip rm">리얼모드</span><span class="where">cli:109 · do_move:115 · end_move:130</span></div>
+    <p>먼저 <code>cli</code>로 인터럽트를 끕니다. <code>do_move</code>가 <code>0x10000~0x8FFFF</code>를 64KB(<code>cx=0x8000</code> 워드)씩 <code>0x0</code>으로 복사합니다. 이 복사가 BIOS 인터럽트 벡터 테이블(<code>0x0~0x3FF</code>)을 덮으므로, 이후로는 BIOS 호출이 불가능합니다.</p>
+    <div class="gdb">gdb: setup 시작에서 <code>x/4xb 0x0</code> → <code>53 ff 00 f0</code>(IVT, <code>int 0</code> = <code>f000:ff53</code>). startup_32에서 다시 보면 <code>b8 10 00 00</code>(<code>mov $0x10,%eax</code>, 커널 코드)</div>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>setup이 보호모드를 준비한다</h3><span class="chip rm">리얼모드</span><span class="where">lidt:133 · lgdt:134 · A20:139–142 · 8259:154–</span></div>
+    <p>① <code>lidt</code>로 비어 있는 IDT(limit 0), <code>lgdt</code>로 임시 GDT(널, 코드 <code>0x08</code>, 데이터 <code>0x10</code>)를 등록합니다. 코드·데이터 모두 base=0, limit=8MB, 32비트입니다(<code>gdt:205</code>). ② 8042 키보드 컨트롤러에 <code>0xD1</code>, <code>0xDF</code>를 보내 <b>A20</b>을 켜서 1MB 위 주소를 쓸 수 있게 합니다. ③ 8259A <b>PIC</b>를 다시 설정해 하드웨어 인터럽트를 <code>0x20~0x2F</code>번으로 옮기고 일단 전부 막습니다(CPU 예외 0~0x1F와 겹치지 않도록).</p>
+  </li>
+  <li class="step rm">
+    <div class="head"><h3>PE를 켜고 far jump로 넘어간다</h3><span class="chip rm">→</span><span class="chip pm">보호모드</span><span class="where">setup.s:192 · :193</span></div>
+    <p><code>mov ax,#0x0001</code> + <code>lmsw ax</code>(CR0의 하위 16비트에 쓰는 286 명령, PE=1) 직후 <code>jmpi 0,8</code>. far jump는 <b>CS를 GDT의 코드 디스크립터(셀렉터 0x08)로 다시 읽고</b> 명령 프리페치를 비웁니다. 그 순간부터 CPU는 같은 바이트를 32비트로 해석하고, <code>EIP=0</code>, 즉 <code>startup_32</code>를 실행합니다. 부트로더의 일은 여기서 끝납니다.</p>
+    <div class="gdb">gdb: <code>hbreak *0x90301</code>(lmsw), <code>hbreak *0x90304</code>(jmpi). PE=1과 jmpi 사이는 PE=1이지만 CS가 아직 리얼모드 값(<code>0x9020</code>)이라 <b>여전히 16비트</b>입니다. d16이 CS까지 보고 판별하는 이유입니다.</div>
+  </li>
+  <li class="step pm">
+    <div class="head"><h3>head: startup_32가 커널 환경을 만든다</h3><span class="chip pm">보호모드</span><span class="where">boot/head.s:17–48</span></div>
+    <p><code>ds/es/fs/gs</code>=0x10(데이터 셀렉터), <code>lss _stack_start,%esp</code>로 스택을 <code>user_stack</code>(<code>kernel/sched.c</code>) 끝에 잡고, <code>setup_idt</code>(256개 벡터를 모두 <code>ignore_int</code>로. 처리 안 된 인터럽트가 오면 <code>Unknown interrupt</code>를 찍음), <code>setup_gdt</code>(커널의 GDT로 교체)를 합니다. 그 다음 A20이 정말 켜졌는지(<code>0x000000</code>에 쓴 값이 <code>0x100000</code>에 보이면 안 켜진 것, 33–36줄) 확인하고, x87 수치 보조프로세서 유무를 검사합니다(<code>check_x87:54</code>).</p>
+    <div class="gdb">gdb: <code>hbreak *0x0</code>. 멈추면 d16이 자동으로 32비트 + <code>tools/system</code> 심볼로 전환</div>
+  </li>
+  <li class="step pm">
+    <div class="head"><h3>head: 페이징을 켜고 ret으로 main에 들어간다</h3><span class="chip pm">보호모드</span><span class="where">after_page_tables:135 · setup_paging:198–219</span></div>
+    <p><code>after_page_tables</code>가 스택에 main의 인자 3개(0), 복귀 주소 <code>L6</code>, 그리고 <code>main</code>의 주소를 쌓아 둡니다. <code>setup_paging</code>이 <code>pg0~pg3</code>(<code>0x1000~0x4FFF</code>)으로 0~16MB를 1:1 매핑하고, 페이지 디렉터리(<code>pg_dir</code>, 주소 0)를 <code>cr3</code>에 넣고 <code>CR0.PG</code>를 켭니다. 마지막 <code>ret</code>이 스택에 있던 <code>main</code> 주소로 점프합니다. <code>jmp main</code>이 아니라 <code>ret</code>을 쓰는 이유는 페이징을 켠 직후 프리페치 큐를 비우기 위해서입니다(소스 주석: <i>this also flushes prefetch-queue</i>).</p>
+    <div class="gdb">페이지 테이블은 <code>std</code>로 거꾸로 채웁니다(<i>fill pages backwards</i>). 원본은 그 뒤 방향 플래그(DF)를 끄지 않고 main에 들어가는데, 이 저장소는 바로 뒤에 <code>cld</code>를 한 줄 넣었습니다(head.s:213). gcc 4.8이 만든 코드는 DF=0을 가정하기 때문입니다(<a href="#qa">Q7</a>).</div>
+  </li>
+  <li class="step pm">
+    <div class="head"><h3>main(): 커널 초기화</h3><span class="chip pm">보호모드</span><span class="where">init/main.c:104–149</span></div>
+    <p>setup이 남긴 <code>0x901FC</code>(루트 장치), <code>0x90080</code>(디스크 정보), <code>0x90002</code>(확장 메모리)를 읽어 메모리 범위를 정합니다. 16MB면 <code>memory_end</code>=<code>0xFE0000</code>, 버퍼 캐시는 4MB까지입니다. 이어서 <code>mem_init</code> → <code>trap_init</code> → <code>blk_dev_init</code> → <code>chr_dev_init</code> → <code>tty_init</code> → <code>time_init</code> → <code>sched_init</code> → <code>buffer_init</code> → <code>hd_init</code> → <code>floppy_init</code> 순으로 초기화하고 <code>sti()</code>(136)로 인터럽트를 켭니다. <code>move_to_user_mode()</code>(137)로 task 0을 사용자 모드로 내리고 <code>fork</code>하면 자식(task 1)이 <code>init()</code>을 실행합니다. task 0은 <code>for(;;) pause();</code>로 남습니다.</p>
+    <p><code>fork()</code>와 <code>pause()</code>는 함수 호출이 아니라 main 안에 <b>인라인</b>되어야 합니다(main.c 주석: <i>so that there won't be any messing with the stack from main()</i>). 커널 공간에서 fork하면 execve 전까지 쓰기 시 복사(copy-on-write)가 일어나지 않아 task 0과 task 1이 같은 스택을 씁니다(main.c 10–16줄 주석). fork 뒤에 main이 함수를 부르면 그 스택을 덮어써서 자식이 망가집니다. 원본 Makefile의 <code>-O</code>가 이 인라인을 만들어 주고, 실제로 <code>int $0x80</code> 두 개가 main 안에 들어간 것을 디스어셈블로 확인했습니다.</p>
+    <div class="gdb">gdb: <code>hbreak main</code> → <code>main () at init/main.c:105</code></div>
+  </li>
+  <li class="step pm">
+    <div class="head"><h3>init: 하드디스크 파티션을 읽는다</h3><span class="chip pm">보호모드</span><span class="where">main.c:172 setup() → kernel/blk_drv/hd.c:73 sys_setup</span></div>
+    <p><code>init()</code>이 <code>setup()</code> 시스템 콜을 부르면 커널의 <code>sys_setup</code>이 setup.s가 저장해 둔 디스크 정보로 드라이브를 설정하고, 커널 자신의 드라이버(<code>hd.c</code>)로 파티션 테이블을 읽습니다. 이제 BIOS가 아니라 커널이 디스크를 읽습니다.</p>
+    <p>원본은 첫 요청 때 IDE 컨트롤러를 소프트 리셋하고, 명령을 보내기 전에 상태 레지스터의 READY 비트를 기다립니다. QEMU에서는 SeaBIOS가 장치 선택을 (없는) 슬레이브에 남겨 두어 상태가 0x00이고, 리셋 뒤에도 READY가 서지 않아 <code>HD controller not ready</code>로 panic합니다. 그래서 이 저장소는 부팅 시 리셋을 건너뛰고(<code>reset = 0</code>), BUSY 비트만 확인하도록 두 줄을 바꿨습니다.</p>
+    <div class="msg"><span class="lbl">화면</span>Partition table ok.</div>
+    <div class="gdb">하드디스크 이미지가 없으면 여기서 <code>harddisk I/O error</code>가 납니다. gdb: <code>hbreak sys_setup</code></div>
+  </li>
+  <li class="step pm">
+    <div class="head"><h3>init: 루트 파일시스템을 마운트한다</h3><span class="chip pm">보호모드</span><span class="where">hd.c:159 → fs/super.c:242 mount_root</span></div>
+    <p><code>ROOT_DEV</code>(0x0301)의 슈퍼블록을 읽어 루트로 마운트하고, 빈 블록·빈 inode 수를 세어 출력합니다. 실패하면 <code>panic("Unable to mount root")</code>(super.c:262)로 멈춥니다.</p>
+    <div class="msg"><span class="lbl">화면</span>46081/60000 free blocks
+19232/20000 free inodes</div>
+  </li>
+  <li class="step pm">
+    <div class="head"><h3>init: 콘솔을 열고 메모리 정보를 찍는다</h3><span class="chip pm">보호모드</span><span class="where">init/main.c:173–178</span></div>
+    <p><code>/dev/tty0</code>을 열어 표준 입출력(0, 1, 2)으로 만들고, 버퍼 캐시와 남은 주 메모리를 출력합니다. 이건 <code>printk</code>가 아니라 사용자 모드 <code>printf</code> → <code>write</code> 시스템 콜입니다. <code>Free mem</code> = <code>0xFE0000 − 0x400000</code> = 12451840.</p>
+    <div class="msg"><span class="lbl">화면</span>3466 buffers = 3549184 bytes buffer space
+Free mem: 12451840 bytes</div>
+  </li>
+  <li class="step us">
+    <div class="head"><h3>/etc/rc 실행</h3><span class="chip us">디스크 이미지의 프로그램</span><span class="where">main.c:179–187 → hdc-0.11.img의 /etc/rc</span></div>
+    <p><code>fork</code>한 자식이 표준 입력을 <code>/etc/rc</code>로 바꾸고 <code>/bin/sh</code>를 실행합니다. <code>/etc/rc</code>는 커널 소스가 아니라 디스크 이미지 안의 스크립트로, <code>/etc/update &amp;</code>, <code>echo "/dev/hd1 /" &gt; /etc/mtab</code>, <code>echo " Ok. "</code>를 실행합니다.</p>
+    <div class="msg"><span class="lbl">화면</span> Ok.</div>
+  </li>
+  <li class="step us">
+    <div class="head"><h3>로그인 쉘</h3><span class="chip us">디스크 이미지의 프로그램</span><span class="where">main.c:189–207</span></div>
+    <p>init은 무한 루프로 <code>fork</code> → <code>setsid</code> → <code>/dev/tty0</code> 열기 → <code>execve("/bin/sh")</code>(<code>HOME=/usr/root</code>)를 하고, 쉘이 끝나면 <code>child N died with code ...</code>를 찍고 다시 띄웁니다.</p>
+    <div class="msg"><span class="lbl">화면</span>[/usr/root]# _</div>
+  </li>
+</ol>
+
+<h2 id="memory">3. 메모리 맵</h2>
+<p class="sub">값은 QEMU <code>-m 16M</code>에서 gdb로 확인한 것입니다. "확인" 칸의 명령을 gdb에 그대로 입력하면 같은 값이 보입니다.</p>
+
+<h3 style="margin-top:20px">리얼모드 1MB와 BIOS 영역</h3>
+<p>리얼모드에서는 1MB(<code>0x00000~0xFFFFF</code>)까지만 주소를 쓸 수 있습니다. 그중 BIOS가 쓰는 곳은 <b>맨 아래(IVT·BDA)</b>, <b>640KB 바로 밑(EBDA)</b>, <b>640KB 위쪽(ROM)</b>입니다. 정리하면 시스템 BIOS 코드는 <code>0xF0000~0xFFFFF</code>(64KB), VGA BIOS는 <code>0xC0000~0xCAFFF</code>, BIOS가 쓰는 데이터는 <code>0x0~0x4FF</code>와 <code>0x9FC00~0x9FFFF</code>입니다.</p>
+<div class="tbl">
+<table>
+  <thead><tr><th>주소</th><th>크기</th><th>내용</th><th>확인 (0x7c00에서 멈춘 상태)</th></tr></thead>
+  <tbody>
+    <tr><td class="rmc"><code>0x00000~0x003FF</code></td><td>1KB</td><td>IVT (인터럽트 벡터 테이블). 4바이트(오프셋, 세그먼트) × 256개. <code>int N</code>의 벡터는 <code>N*4</code>번지</td><td><code>x/2xh 0x4c</code> → <code>0xe3fe 0xf000</code> (<code>int 0x13</code> → 시스템 BIOS)<br><code>x/2xh 0x40</code> → <code>0x5606 0xc000</code> (<code>int 0x10</code> → VGA BIOS)</td></tr>
+    <tr><td class="rmc"><code>0x00400~0x004FF</code></td><td>256B</td><td>BDA (BIOS 데이터 영역)</td><td><code>x/1dh 0x413</code> → <code>639</code> (기본 메모리 KB)<br><code>x/1xh 0x40e</code> → <code>0x9fc0</code> (EBDA 세그먼트)</td></tr>
+    <tr><td><code>0x00500~0x07BFF</code></td><td></td><td>비어 있음</td><td></td></tr>
+    <tr><td class="rmc"><code>0x07C00~0x07DFF</code></td><td>512B</td><td>BIOS가 읽어 온 부트섹터</td><td><code>x/2xb 0x7dfe</code> → <code>0x55 0xaa</code></td></tr>
+    <tr><td><code>0x07E00~0x9FBFF</code></td><td></td><td>비어 있음. Linux가 <code>0x10000</code>(system), <code>0x90000</code>(bootsect·setup·스택)에 사용</td><td></td></tr>
+    <tr><td class="rmc"><code>0x9FC00~0x9FFFF</code></td><td>1KB</td><td>EBDA (확장 BIOS 데이터 영역). 기본 메모리 639KB가 여기서 끝남</td><td>BDA <code>0x40E</code> 값 × 16</td></tr>
+    <tr><td><code>0xA0000~0xBFFFF</code></td><td>128KB</td><td>비디오 메모리. 텍스트 화면은 <code>0xB8000</code>(글자, 속성 순서로 2바이트씩)</td><td><code>x/8xb 0xb8000</code></td></tr>
+    <tr><td class="rmc"><code>0xC0000~0xCAFFF</code></td><td>44KB</td><td>VGA BIOS ROM (<code>int 0x10</code>)</td><td></td></tr>
+    <tr><td class="rmc"><code>0xCE000~0xE3FFF</code></td><td></td><td>옵션 ROM (iPXE 네트워크 부트)</td><td></td></tr>
+    <tr><td class="rmc"><code>0xF0000~0xFFFFF</code></td><td>64KB</td><td><b>시스템 BIOS ROM (SeaBIOS)</b>. 맨 끝 <code>0xFFFF0</code>이 리셋 벡터</td><td>접속 직후 <code>info registers cs eip</code></td></tr>
+    <tr><td><code>0x100000~0xFFFFFF</code></td><td>15MB</td><td>확장 메모리. A20을 켜야 접근 가능</td><td></td></tr>
+    <tr><td><code>0xFFFC0000~0xFFFFFFFF</code></td><td>256KB</td><td>BIOS ROM의 원래 위치(4GB 맨 위). <code>0xF0000</code>대는 이것의 복사본</td><td></td></tr>
+  </tbody>
+</table>
+</div>
+<p>QEMU가 실제로 나눈 맵은 gdb에서 <code>monitor info mtree -f</code>로 볼 수 있습니다. 출력이 깁니다. <code>FlatView</code>가 여러 개 나오는데 <code>AS "memory"</code>가 있는 블록이 CPU가 보는 메모리 맵입니다.</p>
+<pre><code>0000000000000000-000000000009ffff (prio 0, ram): pc.ram
+00000000000a0000-00000000000bffff (prio 1, i/o): vga-lowmem
+00000000000c0000-00000000000cafff (prio 0, rom): pc.ram @00000000000c0000
+00000000000f0000-00000000000fffff (prio 0, rom): pc.ram @00000000000f0000
+0000000000100000-0000000000ffffff (prio 0, ram): pc.ram @0000000000100000
+00000000fffc0000-00000000ffffffff (prio 0, rom): pc.bios</code></pre>
+
+<h3 style="margin-top:20px">setup이 0x90000에 남기는 값</h3>
+<p>bootsect(512B)가 있던 자리를 setup이 BIOS 정보 저장소로 다시 씁니다. main은 보호모드에서 BIOS를 못 부르니 여기서 읽어 갑니다(<code>init/main.c</code>의 <code>EXT_MEM_K</code>, <code>DRIVE_INFO</code>, <code>ORIG_ROOT_DEV</code>).</p>
+<div class="tbl">
+<table>
+  <thead><tr><th>주소</th><th>크기</th><th>내용</th><th>확인 (<code>hbreak *0x0</code> 후)</th></tr></thead>
+  <tbody>
+    <tr><td><code>0x90000</code></td><td>2B</td><td>커서 위치 (<code>int 0x10</code> AH=3). 상위 바이트 = 행</td><td><code>x/1xh 0x90000</code> → <code>0x0b00</code> (11행 0열 = <code>Loading system ...</code> 다음 줄)</td></tr>
+    <tr><td><code>0x90002</code></td><td>2B</td><td>확장 메모리 크기 KB (<code>int 0x15</code> AH=0x88)</td><td><code>x/1dh 0x90002</code> → <code>15232</code></td></tr>
+    <tr><td><code>0x90004</code></td><td>2B</td><td>비디오 페이지</td><td></td></tr>
+    <tr><td><code>0x90006</code></td><td>2B</td><td>비디오 모드, 화면 폭</td><td></td></tr>
+    <tr><td><code>0x90008~0x9000D</code></td><td>6B</td><td>EGA/VGA 정보</td><td></td></tr>
+    <tr><td><code>0x90080</code></td><td>16B</td><td>하드디스크 0 파라미터 (<code>int 0x41</code> 벡터가 가리키는 표)</td><td><code>x/16xb 0x90080</code></td></tr>
+    <tr><td><code>0x90090</code></td><td>16B</td><td>하드디스크 1 파라미터 (없으면 0)</td><td></td></tr>
+    <tr><td><code>0x901FC</code></td><td>2B</td><td>루트 장치 (bootsect 508번째 바이트)</td><td><code>x/1xh 0x901fc</code> → <code>0x0301</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3 style="margin-top:20px">커널이 올라간 뒤 (16MB)</h3>
+<div class="tbl">
+<table>
+  <thead><tr><th>주소</th><th>내용</th><th>근거</th></tr></thead>
+  <tbody>
+    <tr><td class="pmc"><code>0x00000~0x00FFF</code></td><td>페이지 디렉터리 (<code>pg_dir</code>). 원래 head.s 코드가 있던 자리를 재활용</td><td><code>System.map</code> (이름 앞에 <code>_</code>가 붙어 <code>_pg_dir</code>, <code>_main</code>처럼 보임. gdb에서는 <code>_</code> 없이 씀)</td></tr>
+    <tr><td class="pmc"><code>0x01000~0x04FFF</code></td><td>페이지 테이블 4개 (<code>pg0~pg3</code>), 하나가 4MB씩 16MB 매핑</td><td></td></tr>
+    <tr><td class="pmc"><code>0x05000~0x053FF</code></td><td><code>tmp_floppy_area</code> (플로피 DMA 버퍼 1KB)</td><td></td></tr>
+    <tr><td class="pmc"><code>0x054B8</code> / <code>0x05CB8</code></td><td><code>idt</code> / <code>gdt</code> (각 2KB)</td><td></td></tr>
+    <tr><td class="pmc"><code>0x06757</code></td><td><code>main</code></td><td></td></tr>
+    <tr><td class="pmc"><code>~0x1EECC</code></td><td>커널 끝 (<code>_end</code>). 커널 전체가 약 123KB</td><td></td></tr>
+    <tr><td><code>_end~0x3FFFFF</code></td><td>버퍼 캐시. <code>0xA0000~0xFFFFF</code>(비디오·BIOS 구멍)는 건너뜀</td><td><code>buffer_memory_end</code> = 4MB, <code>fs/buffer.c:374</code></td></tr>
+    <tr><td><code>0x400000~0xFDFFFF</code></td><td>주 메모리. 프로세스에 4KB 페이지 단위로 나눠 줌</td><td><code>Free mem: 12451840</code></td></tr>
+  </tbody>
+</table>
+</div>
+<p><code>memory_end</code> = 1MB + 15232KB = <code>0xFE0000</code>입니다. 16MB를 줬는데 조금 모자라는 건 QEMU/BIOS가 맨 위 일부를 예약하기 때문입니다.</p>
+
+<h2 id="messages">4. 화면 메시지로 위치 알기</h2>
+<p class="sub">화면에 어떤 메시지까지 나왔는지 보면 어느 단계에서 멈췄는지 알 수 있습니다.</p>
+<div class="tbl">
+<table>
+  <thead><tr><th>마지막으로 보인 메시지</th><th>찍는 곳</th><th>그 다음에 멈췄다면</th></tr></thead>
+  <tbody>
+    <tr><td><code>Booting from Floppy...</code></td><td>BIOS</td><td>부트섹터를 못 읽었거나 <code>55 AA</code>가 없음 (<code>Image</code> 문제)</td></tr>
+    <tr><td><code>Loading system ...</code></td><td><code>bootsect.s:96–102</code></td><td>커널 적재·setup·head·main 초반 중 어딘가. <b>이 구간은 화면 출력이 없어서</b> gdb로 봐야 함</td></tr>
+    <tr><td><code>harddisk I/O error</code> 뒤 <code>Kernel panic: Unable to mount root</code></td><td><code>hd.c</code>, <code>super.c:262</code></td><td>하드디스크 이미지가 안 붙었거나, 루트 장치(<code>0x901FC</code>)와 디스크가 안 맞음</td></tr>
+    <tr><td><code>Partition table ok.</code></td><td><code>hd.c:157</code></td><td>루트 마운트 실패</td></tr>
+    <tr><td><code>... free blocks</code> / <code>... free inodes</code></td><td><code>super.c:274, 280</code></td><td>콘솔 열기 실패</td></tr>
+    <tr><td><code>Free mem: ... bytes</code></td><td><code>main.c:178</code></td><td><code>/etc/rc</code> 또는 <code>/bin/sh</code> 실행 실패</td></tr>
+    <tr><td><code>Ok.</code></td><td>디스크의 <code>/etc/rc</code></td><td>로그인 쉘 실행 실패</td></tr>
+    <tr><td><code>[/usr/root]#</code></td><td><code>/bin/sh</code></td><td>정상 부팅 완료</td></tr>
+  </tbody>
+</table>
+</div>
+<p>커널 메시지는 전부 <code>printk</code>를 거칩니다. 보호모드로 넘어간 뒤 <code>printk</code>와 <code>panic</code>에 중단점을 걸면, 멈출 때마다 gdb가 메시지 원문(<code>fmt=</code>)을 보여 주고 <code>bt</code>로 누가 찍었는지 알 수 있습니다.</p>
+<pre><code>(gdb) hbreak *0x0           # startup_32. d16이 tools/system 심볼을 자동으로 불러온다
+(gdb) continue
+(gdb) hbreak printk
+(gdb) hbreak panic
+(gdb) continue
+Breakpoint 4, printk (fmt=0x13aec "Partition table%s ok.\n\r") at printk.c:22
+(gdb) bt 3
+#0  printk (fmt=0x13aec "Partition table%s ok.\n\r") at printk.c:22
+#1  0x000100f4 in sys_setup (BIOS=&lt;optimized out&gt;) at hd.c:157
+#2  0x0000719d in _system_call ()
+(gdb) continue
+Breakpoint 4, printk (fmt=0x13478 "%d/%d free blocks\n\r") at printk.c:22
+(gdb) bt 3
+#1  0x0000b7a7 in mount_root () at super.c:274
+#2  0x000100fe in sys_setup (BIOS=&lt;optimized out&gt;) at hd.c:159</code></pre>
+<p class="note"><code>N buffers ...</code>, <code>Free mem ...</code>은 사용자 모드 <code>printf</code>라서 <code>printk</code> 중단점에 안 걸립니다. <code>Ok.</code>와 프롬프트는 디스크 이미지 안의 프로그램이 찍습니다.</p>
+
+<h2 id="concepts">5. 핵심 개념</h2>
+<p class="sub">위 과정을 이해하는 데 필요한 것만 추렸습니다.</p>
+
+<div class="tbl">
+<table>
+  <thead><tr><th></th><th>리얼모드</th><th>보호모드</th></tr></thead>
+  <tbody>
+    <tr><th>비트 폭 기본값</th><td class="rmc">16비트</td><td class="pmc">32비트 (코드 디스크립터의 D=1일 때)</td></tr>
+    <tr><th>주소 계산</th><td class="rmc"><code>세그먼트 × 16 + 오프셋</code>, 최대 1MB</td><td class="pmc">세그먼트 레지스터는 GDT 인덱스(셀렉터), <code>디스크립터 base + 오프셋</code>, 최대 4GB</td></tr>
+    <tr><th>BIOS 인터럽트</th><td class="rmc">사용 가능 (int 0x10/0x13/0x15)</td><td class="pmc">사용 불가. 커널이 직접 드라이버를 가져야 함</td></tr>
+    <tr><th>보호·페이징</th><td class="rmc">없음</td><td class="pmc">권한 단계(ring 0~3), 페이징 가능</td></tr>
+    <tr><th>이 프로젝트에서</th><td class="rmc">bootsect.s, setup.s</td><td class="pmc">head.s, main.c 이후 전부</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3>세그먼트:오프셋 계산</h3>
+    <p>리얼모드의 선형 주소는 <code>cs*16 + ip</code>입니다. gdb의 <code>$pc</code>는 ip만 보여주므로 <code>0x104</code>처럼 작게 보입니다.</p>
+    <p>예: <code>9020:0104</code> → <code>0x90200 + 0x104</code> = <code>0x90304</code>. setup의 <code>jmpi 0,8</code>이 있는 실제 주소입니다.</p>
+  </div>
+  <div class="card">
+    <h3>BIOS 인터럽트와 부팅 적재</h3>
+    <p>디스크 읽기(<code>int 0x13</code>)는 BIOS가 리얼모드용으로 제공합니다. 보호모드에서는 BIOS 코드를 그대로 호출할 수 없으므로 <b>적재는 반드시 전환 전에</b> 끝냅니다. 전환 뒤의 디스크 접근은 커널의 <code>hd.c</code>, <code>floppy.c</code>가 맡습니다.</p>
+  </div>
+  <div class="card">
+    <h3>GDT와 셀렉터</h3>
+    <p>보호모드에서 <code>cs</code>, <code>ds</code> 같은 값은 주소가 아니라 <b>GDT 항목 번호</b>입니다. setup의 GDT는 널(0x00), 코드(<code>0x08</code>), 데이터(<code>0x10</code>) 세 개이고, 둘 다 base=0, limit=8MB, 32비트입니다. 그래서 선형 주소 = 오프셋이 되어 단순합니다. <code>jmpi 0,8</code>의 8이 코드 셀렉터입니다.</p>
+  </div>
+  <div class="card">
+    <h3>PE 비트와 far jump</h3>
+    <p>CR0의 PE 비트를 켜면 보호모드가 시작되지만 <b>CS의 캐시된 값은 그대로</b>입니다. far jump로 CS를 새 셀렉터로 다시 읽어야 32비트 코드 세그먼트가 적용됩니다. 그래서 <code>lmsw ax</code> 바로 뒤에 <code>jmpi</code>가 옵니다. 원본은 <code>mov cr0,eax</code> 대신 286 시절 명령인 <code>lmsw</code>(CR0 하위 16비트 쓰기)를 씁니다.</p>
+  </div>
+  <div class="card">
+    <h3>A20과 PIC</h3>
+    <p><b>A20</b>: 옛 8086 호환을 위해 막혀 있는 21번째 주소선입니다. 열지 않으면 1MB 위 메모리가 0번지로 되돌아옵니다. 원본은 8042 키보드 컨트롤러로 엽니다. <b>PIC 재설정</b>: IRQ 번호가 CPU 예외 번호와 겹치지 않도록 0x20번부터 쓰게 옮깁니다.</p>
+  </div>
+  <div class="card">
+    <h3>페이징 (head에서)</h3>
+    <p><code>pg0~pg3</code> 4개 페이지 테이블이 0~16MB를 가상=물리로 1:1 매핑합니다. <code>cr3</code>에 <code>pg_dir</code>(주소 0)를 넣고 <code>CR0.PG</code>를 켜면 켜집니다. 페이지 디렉터리가 주소 0에 있는 건, 이미 쓸모없어진 head 앞부분 코드 자리를 재활용하기 때문입니다.</p>
+  </div>
+  <div class="card">
+    <h3>어셈블러가 두 종류인 이유</h3>
+    <p><code>bootsect.s</code>, <code>setup.s</code>는 1991년 원본 그대로 <b>as86</b> 문법(<code>mov ax,#BOOTSEG</code>, <code>!</code> 주석)이고 <code>as86 -0</code>(8086, 16비트)로 어셈블합니다. <code>ld86</code>가 32바이트 minix 헤더가 붙은 파일을 만들고, 원본 <code>tools/build.c</code>가 헤더를 떼고 bootsect(512B) + setup(4섹터) + system을 이어 붙여 <code>Image</code>를 만듭니다. <code>head.s</code>, <code>system_call.s</code> 등 커널 쪽은 <b>GNU as</b>(AT&amp;T 문법, <code>as --32</code>)로 32비트 ELF를 만듭니다. 원본 Linux 0.11도 같은 구성이었습니다(원본은 ELF가 아니라 a.out). a.out 시절 C 심볼에는 <code>_</code>가 붙었기 때문에(<code>main</code> → <code>_main</code>) 원본 <code>.s</code> 파일은 <code>_main</code>, <code>_schedule</code>처럼 씁니다. 지금은 gcc에 <code>-fleading-underscore</code>를 줘서 같은 이름을 만들고 원본 <code>.s</code>를 그대로 씁니다. gdb에서는 디버그 정보 덕에 <code>hbreak main</code>처럼 <code>_</code> 없이 씁니다.</p>
+  </div>
+  <div class="card">
+    <h3>어셈블리와 기계어</h3>
+    <p>16/32비트는 <b>어셈블러에게 하는 지시</b>이고 결과 바이너리에는 남지 않습니다. 같은 <code>mov ax,#0x07c0</code>이 16비트로는 <code>B8 C0 07</code>, 32비트 코드에서는 <code>66 B8 C0 07</code>입니다(<code>0x66</code>은 operand 크기를 뒤집는 prefix). CPU는 바이트만 보고, 해석 방식은 현재 모드가 정합니다. 어셈블러 설정과 CPU의 실제 모드가 어긋나면 명령 길이가 달라져 이후 바이트가 전부 엉뚱하게 읽히고, 에러도 없이 조용히 오동작합니다.</p>
+  </div>
+</div>
+
+<h2 id="qa">6. 질문과 답</h2>
+<p class="sub">작업하면서 나온 질문을 정리했습니다.</p>
+
+<div class="qa">
+  <div class="q">Q1. d16으로 디코드하는데, 기계어와 어셈블리어를 어떻게 구별하나요?</div>
+  <div class="a">
+    <p><b>구별하지 않습니다.</b> 기계어에는 모드 표시가 없고, 어셈블리는 어셈블 단계에서 이미 사라집니다. <code>d16</code>은 커널 코드가 아니라 gdb 안에서만 도는 디버깅 명령(<code>scripts/d16.py</code>)입니다.</p>
+    <ul>
+      <li>QEMU 메모리에서 현재 위치의 바이트를 읽어 <code>objdump -m i8086</code>에 넘겨 16비트로 역어셈블합니다.</li>
+      <li>이렇게 우회하는 이유는 gdb 9.x가 <code>set architecture i8086</code> 뒤에도 <code>x/i</code>를 32비트로 해석하기 때문입니다. <code>layout asm</code>에 <code>add BYTE PTR [eax],al</code>만 잔뜩 보이는 게 그 증상입니다.</li>
+      <li>모드 선택은 CPU 상태(CR0.PE와 CS)로 합니다. 자동입니다.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q2. 지금 보고 있는 명령이 소스의 어디인지 모르겠어요.</div>
+  <div class="a">
+    <p><code>output/bootsect.elf</code>는 완성 바이너리를 ELF로 감싼 것뿐이라 디버그 정보(라인 테이블)가 없습니다. 그래서 gdb에 <code>in ?? ()</code>만 나옵니다.</p>
+    <p>대신 <code>as86 -l</code>로 만든 <b>리스팅</b>(<code>output/bootsect.lst</code>, <code>output/setup.lst</code>)에서 <code>줄번호 / 오프셋 / 기계어 / 소스</code>가 1:1로 대응합니다. 주소는 아래 표대로 구합니다. <code>d16</code>이 이 표를 자동으로 적용해 <code>; bootsect.s:47  mov ax,#BOOTSEG</code>처럼 붙여 줍니다.</p>
+    <div class="tbl">
+    <table>
+      <thead><tr><th>구간</th><th>실제 주소</th><th>근거</th></tr></thead>
+      <tbody>
+        <tr><td>bootsect (이동 전)</td><td><code>0x7c00 + 오프셋</code></td><td>BIOS가 로드</td></tr>
+        <tr><td>bootsect (이동 후)</td><td><code>0x90000 + 오프셋</code></td><td><code>jmpi go,INITSEG</code> (bootsect.s:56)</td></tr>
+        <tr><td>setup</td><td><code>0x90200 + 오프셋</code> (cs=0x9020)</td><td><code>jmpi 0,SETUPSEG</code> (bootsect.s:139)</td></tr>
+        <tr><td>head (startup_32)</td><td><code>0x0</code></td><td><code>jmpi 0,8</code> (setup.s:193)</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q3. 보호모드로 바뀌면 32비트로 읽어서 d16으로는 안 될 텐데, 어떻게 확인하죠?</div>
+  <div class="a">
+    <p>그래서 <code>d16</code>이 <b>CR0.PE=1 이고 CS가 GDT 셀렉터(작은 값)</b>일 때를 보호모드로 판단해, <code>set architecture i386</code>와 <code>symbol-file tools/system</code>으로 자동 전환하고 기본 <code>x/i</code>를 씁니다. <code>stepi</code>만 눌러도 전환이 따라갑니다.</p>
+    <p>CS까지 보는 이유: <code>lmsw ax</code>와 <code>jmpi 0,8</code> 사이는 PE=1이지만 CS가 아직 리얼모드 값이라 16비트이기 때문입니다. 전환 뒤에는 <code>list</code>로 <code>head.s</code>, <code>main.c</code> 소스 줄까지 보입니다.</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q4. 부트로더가 보호모드까지 진입하나요? OS를 램에 올리는 건 보호모드 진입 후인가요?</div>
+  <div class="a">
+    <p>보호모드 진입은 <b>부트로더(setup)의 마지막 일</b>이 맞습니다. 하지만 <b>순서는 반대</b>입니다. 디스크에서 RAM으로 올리는 일이 먼저, 리얼모드에서 BIOS로 끝납니다. 그 뒤 setup이 모드를 바꿉니다.</p>
+    <ul>
+      <li>부트로더의 범위: <b>bootsect + setup</b>. 임무는 "커널을 RAM에 올리고, 보호모드를 켜고, 진입점으로 점프"입니다.</li>
+      <li><code>head.s</code>부터는 커널(system)입니다. <code>jmpi 0,8</code> 한 줄이 경계입니다.</li>
+      <li>보호모드 이후의 디스크 접근(루트 파일시스템 등)은 커널 드라이버가 합니다.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q5. si로 따라가다 귀찮아서 continue 했더니 <code>Kernel panic: Unable to mount root</code>가 났어요. 부트로더를 못 빠져나온 건가요?</div>
+  <div class="a">
+    <p>아닙니다. <code>Loading system ...</code> 다음에 커널 메시지가 나왔다면 bootsect → setup → head → main까지 다 넘어간 것입니다. 루트 파일시스템이 있는 하드디스크 이미지가 QEMU에 안 붙어 있어서 루트 마운트(위 16번 단계)에서 멈춘 것입니다. 지금 <code>scripts/qemu-debug.sh boot</code>는 <code>output/hdc-0.11.img</code>가 있으면 같이 붙이므로 <code>continue</code>로 쉘까지 갑니다.</p>
+    <p><code>continue</code>는 다음 중단점까지 실행하는 명령이라 써도 됩니다. <code>si 50000</code> 대신 보고 싶은 지점에 <code>hbreak</code>를 걸고 <code>continue</code> 하세요(<a href="#gdb">아래 표</a>).</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q6. VSCode로는 main까지 되는데 부트로더는 왜 안 되나요?</div>
+  <div class="a">
+    <p>VSCode(cppdbg)는 bootsect 구간에서 gdb의 정지 상태를 "실행 중"으로 인식해 <code>stepi</code>가 안 됩니다. 그래서 WSL 터미널 두 개(<code>bootloader_terminal1.sh</code>: QEMU, <code>bootloader_terminal2.sh</code>: gdb)로 직접 디버깅합니다. 보호모드 이후(<code>startup_32</code>~<code>main</code>)는 VSCode 설정으로도 됩니다.</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q7. 원본 소스는 왜 그대로 빌드되지 않나요? 무엇을 고쳤나요?</div>
+  <div class="a">
+    <p>원본은 1991년 <b>gcc 1.x</b>와 a.out 형식용이고, 빌드 환경(Ubuntu 14.04)에는 <b>gcc 4.8</b>밖에 없습니다. 최적화를 하려고 고친 게 아니라, 지금 컴파일러로 빌드하고 바르게 동작하게 하는 데 꼭 필요한 것만 고쳤습니다. 원본과 다른 파일은 26개이고 <code>diff -r linux-0.11-original . -x linux-0.11-original -x .git</code>로 전부 볼 수 있습니다.</p>
+    <ul>
+      <li><b>컴파일 에러:</b> 인라인 asm에서 입력으로 준 레지스터를 clobber 목록에도 적는 것(gcc 3 이후 <code>impossible constraints</code>), 캐스트에 대입, <code>#elif</code>만 쓰기, <code>xorl %al,%al</code>, <code>.align 3</code>(a.out에선 2³바이트, ELF에선 3바이트), 바이트 값에 <code>"r"</code> 제약(<code>%sil</code>이 나옴).</li>
+      <li><b>에러는 없지만 잘못 동작:</b> gcc 4.8은 "함수 경계에서 방향 플래그 DF=0"을 가정하고 구조체 복사를 <code>rep movsl</code>로 만듭니다. 원본은 <code>std</code>를 쓴 뒤 DF를 끄지 않아서, fork의 <code>*p = *current</code>가 <code>get_free_page()</code> 직후 거꾸로 복사됐습니다. task 1의 <code>priority</code>가 0이 되어 스케줄러가 init을 영영 고르지 못했습니다. <code>std</code>를 쓰는 4곳 끝에 <code>cld</code>를 넣어 해결했습니다.</li>
+      <li><b>a.out 심볼:</b> 원본 <code>.s</code>는 C 심볼을 <code>_main</code>처럼 부릅니다. 소스를 고치는 대신 gcc에 <code>-fleading-underscore</code>를 줬습니다.</li>
+      <li><b>환경 차이:</b> QEMU IDE 호환(<code>hd.c</code> 2줄, 15단계 참고), Windows 드라이브의 대소문자 무시(<code>keyboard.S</code> 빌드 규칙), 원본 <code>build.c</code>를 고치지 않고 쓰기 위한 컴파일 옵션(<code>-m32</code>)과 Makefile 연결.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q8. 커널이 127KB에서 107KB로 줄었는데, 동작이 달라진 건가요?</div>
+  <div class="a">
+    <p>아닙니다. 이전에 쓰던 버전은 컴파일 옵션에 <code>-O</code>(최적화)가 빠져 있었고, 지금은 원본 Makefile대로 <code>-O</code>를 씁니다. 같은 C 코드를 원본과 같은 최적화 수준으로 컴파일해서 작아진 것입니다. <code>-O</code>는 fork/pause 인라인에 필요하기도 합니다(14단계).</p>
+    <p>대신 gdb에서 일부 변수가 <code>&lt;optimized out&gt;</code>으로 보이거나 <code>next</code>로 진행할 때 줄이 앞뒤로 튈 수 있습니다. 최적화된 코드라서 생기는 정상 동작입니다.</p>
+  </div>
+</div>
+
+<div class="qa">
+  <div class="q">Q9. 키보드 배열은 왜 바꿨나요?</div>
+  <div class="a">
+    <p>원본 기본값은 핀란드식(<code>include/linux/config.h</code>의 <code>KBD_FINNISH</code>)이라, 한국/US 키보드로 QEMU 쉘에 칠 때 <code>/</code>가 <code>-</code>, <code>-</code>가 <code>+</code>, <code>&gt;</code>가 <code>:</code>로 들어갑니다. 원본에 이미 있는 <code>KBD_US</code>를 켜고 <code>KBD_FINNISH</code>를 껐습니다. <code>keyboard.S</code>는 켜 둔 배열의 표 하나만 어셈블하므로 커널 크기는 같고, 둘 다 켜면 먼저 검사하는 핀란드식이 쓰입니다.</p>
+  </div>
+</div>
+
+<h2 id="gdb">7. gdb로 직접 확인하기</h2>
+<p class="sub">저장소 루트에서 실행합니다. 처음 한 번은 <code>./build.sh</code>와 <code>./build.sh boot</code>로 Image와 리스팅을 만듭니다.</p>
+
+<pre><code># 터미널 1: QEMU를 gdb 대기 상태로 (output/Image + output/hdc-0.11.img). QEMU 화면 창도 뜬다
+./bootloader_terminal1.sh
+
+# 터미널 2: gdb 접속. 0x7c00에서 멈춘다. 멈출 때마다 현재 명령과 소스 줄이 자동 출력된다
+./bootloader_terminal2.sh</code></pre>
+
+<div class="tbl">
+<table>
+  <thead><tr><th>중단점</th><th>위치 (원본 소스)</th></tr></thead>
+  <tbody>
+    <tr><td class="rmc"><code>hbreak *0x7c00</code></td><td>bootsect 시작 (터미널 2가 자동으로 걸어 둠)</td></tr>
+    <tr><td class="rmc"><code>hbreak *0x90018</code></td><td><code>go:</code> (bootsect가 0x90000으로 옮겨진 직후)</td></tr>
+    <tr><td class="rmc"><code>hbreak *0x9003d</code></td><td><code>ok_load_setup:</code> (setup 4섹터 읽기 성공)</td></tr>
+    <tr><td class="rmc"><code>hbreak *0x9006c</code></td><td><code>call kill_motor</code> (커널 본체 적재 완료. 가장 긴 구간을 건너뜀)</td></tr>
+    <tr><td class="rmc"><code>hbreak *0x90093</code></td><td><code>jmpi 0,SETUPSEG</code> (setup으로 점프)</td></tr>
+    <tr><td class="rmc"><code>hbreak *0x90200</code></td><td>setup 시작</td></tr>
+    <tr><td class="rmc"><code>hbreak *0x90301</code> / <code>*0x90304</code></td><td><code>lmsw ax</code> / <code>jmpi 0,8</code></td></tr>
+    <tr><td class="pmc"><code>hbreak *0x0</code></td><td><code>startup_32</code> (head.s)</td></tr>
+    <tr><td class="pmc"><code>hbreak main</code></td><td><code>init/main.c:105</code> (보호모드 전환 후 심볼이 로드된 뒤)</td></tr>
+    <tr><td class="pmc"><code>hbreak sys_setup</code> / <code>printk</code> / <code>panic</code></td><td>루트 마운트 시작 / 커널 메시지 / 커널 패닉</td></tr>
+  </tbody>
+</table>
+</div>
+<p>주소는 <code>output/*.lst</code>의 오프셋(둘째 칸)에 로드 위치를 더한 값입니다. 소스를 고치면 바뀌므로 리스팅에서 다시 확인합니다.</p>
+
+<div class="tbl">
+<table>
+  <thead><tr><th>보고 싶은 것</th><th>방법</th></tr></thead>
+  <tbody>
+    <tr><td>현재 명령과 소스 줄</td><td><code>stepi</code> (멈출 때마다 <code>d16 1</code>이 자동 출력)</td></tr>
+    <tr><td>앞으로 N개 명령</td><td><code>d16 N</code> (모드 자동 판별)</td></tr>
+    <tr><td>레지스터</td><td><code>info registers</code>, 또는 <code>layout regs</code>(TUI). <code>layout asm</code>은 16비트를 잘못 보여 주므로 쓰지 않음</td></tr>
+    <tr><td>적재가 끝난 뒤 메모리</td><td><code>x/16xb 0x10000</code> (이동 전), <code>x/16xb 0x0</code> (이동 후)</td></tr>
+    <tr><td>QEMU 메모리 맵</td><td><code>monitor info mtree -f</code></td></tr>
+    <tr><td>종료</td><td>gdb에서 <code>quit</code> → 터미널 1에서 <code>Ctrl+C</code>, 남은 QEMU는 <code>pkill -f '^qemu-system-i386'</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="note">setup 구간(<code>cs=0x9020</code>)에서는 gdb가 <code>$pc</code>를 ip(예: <code>0x104</code>)로 보기 때문에, 선형 주소로 건 <code>hbreak</code>에 멈춰도 <code>Breakpoint N</code> 대신 <code>Program received signal SIGTRAP</code>으로 표시됩니다. 정상 동작입니다.</p>
+
+<footer>이 문서는 저장소의 <code>boot/bootsect.s</code>, <code>boot/setup.s</code>(Linus 원본과 같음), <code>boot/head.s</code>, <code>init/main.c</code>, <code>kernel/blk_drv/hd.c</code>(원본 + gcc 4.8/QEMU용 최소 패치), <code>scripts/d16.py</code>를 기준으로 작성했습니다. 주소·값은 QEMU <code>-m 16M</code>에서 확인했습니다. 줄 번호와 주소는 소스를 수정하면 달라질 수 있습니다.</footer>
+</div>
+
+</body>
+</html>
