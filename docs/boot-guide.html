@@ -115,7 +115,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; border-top: 1px
 <div class="wrap">
 <header>
   <h1>Linux 0.11 부팅: 전원이 켜지고 쉘이 뜨기까지</h1>
-  <p class="lead">BIOS가 부트섹터를 올리는 순간부터 <code>main()</code>을 거쳐 쉘 프롬프트 <code>[/usr/root]#</code>가 뜨기까지, 이 저장소의 소스 기준으로 정리했습니다. 커널 소스는 Linus의 원본(<code>linux-0.11-original/</code>)에 gcc 4.8로 빌드하고 QEMU로 부팅하는 데 꼭 필요한 것만 고친 것이고, <code>bootsect.s</code>·<code>setup.s</code>는 원본과 같습니다. 고친 내용은 README의 "원본과 다른 점"과 아래 <a href="#qa">Q7</a>에 있습니다. 주소와 값은 QEMU(<code>-m 16M</code>)에서 gdb로 실제로 확인한 것입니다.</p>
+  <p class="lead">BIOS가 부트섹터를 올리는 순간부터 <code>main()</code>을 거쳐 쉘 프롬프트 <code>[/usr/root]#</code>가 뜨기까지, 이 저장소의 소스 기준으로 정리했습니다. 커널 소스는 Linus의 원본(kernel.org의 <a href="https://www.kernel.org/pub/linux/kernel/Historic/linux-0.11.tar.gz">linux-0.11.tar.gz</a>)에 gcc 4.8로 빌드하고 QEMU로 부팅하는 데 꼭 필요한 것만 고친 것이고, <code>bootsect.s</code>·<code>setup.s</code>는 원본과 같습니다. 고친 내용은 README의 "원본과 다른 점"과 아래 <a href="#qa">Q7</a>에 있습니다. 주소와 값은 QEMU(<code>-m 16M</code>)에서 gdb로 실제로 확인한 것입니다.</p>
   <ul class="nav">
     <li><a href="boot-guide.en.html" lang="en">English</a></li>
     <li><a href="#map">전체 구상도</a></li>
@@ -586,7 +586,7 @@ Breakpoint 4, printk (fmt=0x13478 "%d/%d free blocks\n\r") at printk.c:22
 <div class="qa">
   <div class="q">Q7. 원본 소스는 왜 그대로 빌드되지 않나요? 무엇을 고쳤나요?</div>
   <div class="a">
-    <p>원본은 1991년 <b>gcc 1.x</b>와 a.out 형식용이고, 빌드 환경(Ubuntu 14.04)에는 <b>gcc 4.8</b>밖에 없습니다. 최적화를 하려고 고친 게 아니라, 지금 컴파일러로 빌드하고 바르게 동작하게 하는 데 꼭 필요한 것만 고쳤습니다. 원본과 다른 파일은 26개이고 <code>diff -r linux-0.11-original . -x linux-0.11-original -x .git</code>로 전부 볼 수 있습니다.</p>
+    <p>원본은 1991년 <b>gcc 1.x</b>와 a.out 형식용이고, 빌드 환경(Ubuntu 14.04)에는 <b>gcc 4.8</b>밖에 없습니다. 최적화를 하려고 고친 게 아니라, 지금 컴파일러로 빌드하고 바르게 동작하게 하는 데 꼭 필요한 것만 고쳤습니다. 원본과 다른 파일은 26개이고 원본 tarball을 풀어 <code>diff -r</code>로 비교하면 전부 볼 수 있습니다.</p>
     <ul>
       <li><b>컴파일 에러:</b> 인라인 asm에서 입력으로 준 레지스터를 clobber 목록에도 적는 것(gcc 3 이후 <code>impossible constraints</code>), 캐스트에 대입, <code>#elif</code>만 쓰기, <code>xorl %al,%al</code>, <code>.align 3</code>(a.out에선 2³바이트, ELF에선 3바이트), 바이트 값에 <code>"r"</code> 제약(<code>%sil</code>이 나옴).</li>
       <li><b>에러는 없지만 잘못 동작:</b> gcc 4.8은 "함수 경계에서 방향 플래그 DF=0"을 가정하고 구조체 복사를 <code>rep movsl</code>로 만듭니다. 원본은 <code>std</code>를 쓴 뒤 DF를 끄지 않아서, fork의 <code>*p = *current</code>가 <code>get_free_page()</code> 직후 거꾸로 복사됐습니다. task 1의 <code>priority</code>가 0이 되어 스케줄러가 init을 영영 고르지 못했습니다. <code>std</code>를 쓰는 4곳 끝에 <code>cld</code>를 넣어 해결했습니다.</li>

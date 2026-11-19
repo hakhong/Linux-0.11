@@ -4,7 +4,7 @@
 
 Linus Torvalds의 Linux 0.11(1991) 원본 소스를 **WSL 안의 Docker 컨테이너에서 빌드**하고, **WSL의 QEMU로 부팅**하면서 **gdb로 전원 ON부터 쉘까지 한 줄씩 따라가는** 학습용 저장소다.
 
-- 커널 소스는 원본에 **gcc 4.8 빌드와 QEMU 부팅에 꼭 필요한 것만** 고쳤다. `bootsect.s`, `setup.s`, `tools/build.c`, 커널 `.s` 파일은 원본 그대로다. 원본은 [`linux-0.11-original/`](linux-0.11-original/)에 따로 두었다.
+- 커널 소스는 원본에 **gcc 4.8 빌드와 QEMU 부팅에 꼭 필요한 것만** 고쳤다. `bootsect.s`, `setup.s`, `tools/build.c`, 커널 `.s` 파일은 원본 그대로다. 원본은 kernel.org의 [linux-0.11.tar.gz](https://www.kernel.org/pub/linux/kernel/Historic/linux-0.11.tar.gz)이다.
 - 부트로더(16비트 리얼모드)는 터미널의 gdb로, `startup_32` 이후(32비트 보호모드)는 VSCode의 F5로 디버깅한다.
 - 부팅 과정 해설: [docs/boot-guide.html](docs/boot-guide.html) (영어: [docs/boot-guide.en.html](docs/boot-guide.en.html)). 저장소를 받은 뒤 브라우저로 연다.
 
@@ -13,7 +13,6 @@ Linus Torvalds의 Linux 0.11(1991) 원본 소스를 **WSL 안의 Docker 컨테�
 | 위치 | 내용 |
 |---|---|
 | `boot/`, `fs/`, `include/`, `init/`, `kernel/`, `lib/`, `mm/`, `tools/build.c`, `Makefile` | 커널 소스 (원본 + 최소 패치) |
-| `linux-0.11-original/` | Linus의 원본 그대로 (참조용, 빌드하지 않음). `diff -r linux-0.11-original . -x linux-0.11-original -x .git`로 패치 전체를 본다 |
 | `hdc-0.11.img` | 루트 파일시스템 하드디스크 이미지 (`/bin/sh`, `gcc` 등이 들어 있음) |
 | `Dockerfile`, `docker-compose.yml` | 빌드 환경 (Ubuntu 14.04, gcc 4.8, bin86) |
 | `1_init.sh` ~ `5_debug_gdb.sh`, `9_clean.sh` | 실행하는 스크립트. 번호가 순서다 ([처음부터 실행하는 순서](#처음부터-실행하는-순서)) |

@@ -5,7 +5,7 @@ Linux 0.11(1991) 원본 소스를 WSL 안의 Docker 컨테이너(Ubuntu 14.04, g
 ## 원칙: 원본을 지킨다
 
 - 저장소 루트의 커널 소스(`boot/`, `fs/`, `include/`, `init/`, `kernel/`, `lib/`, `mm/`, `tools/build.c`, `Makefile`)는 원본에 **gcc 4.8 빌드와 QEMU 부팅에 꼭 필요한 것만** 고친 것이다. 사용자는 원본에서 벗어나는 것을 원하지 않는다. 고칠 때는 원본을 가장 덜 바꾸는 방법을 고른다.
-- `linux-0.11-original/`은 Linus의 원본 그대로다. 참조용이고 빌드하지 않으며 고치지 않는다. 패치 전체는 `diff -r linux-0.11-original . -x linux-0.11-original -x .git`.
+- 원본 비교용 `linux-0.11-original/` 폴더는 저장소에서 제거했다. 원본은 kernel.org의 `linux-0.11.tar.gz`이고, 패치 전체는 "Linux 0.11 원본 소스로 교체" 커밋 바로 다음 커밋이다.
 - `bootsect.s`, `setup.s`(as86 문법), `tools/build.c`, 커널 `.s` 파일은 원본과 같다. C 심볼은 `-fleading-underscore`로 `_main`처럼 되고, gdb에서는 `main`처럼 `_` 없이 쓴다.
 - **라이선스:** 원본 파일의 `(C) 1991 Linus Torvalds` 표시는 절대 지우거나 바꾸지 않는다. 소스에는 실제로 고친 코드만 넣고, 이름이나 수정 내역 주석 덩어리는 넣지 않는다. 무엇을 언제 왜 고쳤는지는 README 표와 커밋 메시지에 남긴다. `LICENSE`(GPL v2)와 README의 "License and credits"도 유지한다.
 - 소스를 바꾸면 README의 "Changes from the original" / "원본과 다른 점" 표도 갱신한다.

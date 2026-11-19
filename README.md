@@ -4,7 +4,7 @@
 
 Linus Torvalds' original Linux 0.11 (1991) source, **built in a Docker container inside WSL**, **booted with QEMU in WSL**, and **followed step by step with gdb from power-on to the shell prompt**. It is a repository for learning how the kernel boots.
 
-- The kernel source is the original with **only what gcc 4.8 and QEMU strictly need** changed. `bootsect.s`, `setup.s`, `tools/build.c` and the kernel `.s` files are untouched. The pristine original is kept in [`linux-0.11-original/`](linux-0.11-original/).
+- The kernel source is the original with **only what gcc 4.8 and QEMU strictly need** changed. `bootsect.s`, `setup.s`, `tools/build.c` and the kernel `.s` files are untouched. The pristine original is the [linux-0.11.tar.gz](https://www.kernel.org/pub/linux/kernel/Historic/linux-0.11.tar.gz) on kernel.org.
 - The boot loader (16-bit real mode) is debugged with gdb in a terminal; from `startup_32` on (32-bit protected mode) with F5 in VSCode.
 - Boot walkthrough: [docs/boot-guide.en.html](docs/boot-guide.en.html) (Korean: [docs/boot-guide.html](docs/boot-guide.html)). Open it in a browser after cloning.
 
@@ -13,7 +13,6 @@ Linus Torvalds' original Linux 0.11 (1991) source, **built in a Docker container
 | Path | What |
 |---|---|
 | `boot/`, `fs/`, `include/`, `init/`, `kernel/`, `lib/`, `mm/`, `tools/build.c`, `Makefile` | Kernel source (original + minimal patches) |
-| `linux-0.11-original/` | Linus' original, untouched (reference only, not built). `diff -r linux-0.11-original . -x linux-0.11-original -x .git` shows every patch |
 | `hdc-0.11.img` | Root file system hard disk image (`/bin/sh`, `gcc`, ...) |
 | `Dockerfile`, `docker-compose.yml` | Build environment (Ubuntu 14.04, gcc 4.8, bin86) |
 | `1_init.sh` ~ `5_debug_gdb.sh`, `9_clean.sh` | What you run, numbered in order (see [Getting started](#getting-started)) |

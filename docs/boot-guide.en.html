@@ -115,7 +115,7 @@ footer { margin-top: 48px; color: var(--muted); font-size: 13px; border-top: 1px
 <div class="wrap">
 <header>
   <h1>Booting Linux 0.11: from power-on to the shell</h1>
-  <p class="lead">From the moment the BIOS loads the boot sector, through <code>main()</code>, to the shell prompt <code>[/usr/root]#</code>, following this repository's source. The kernel source is Linus' original (<code>linux-0.11-original/</code>) with only what gcc 4.8 and QEMU strictly need changed; <code>bootsect.s</code> and <code>setup.s</code> are identical to the original. The changes are listed in the README under "Changes from the original" and in <a href="#qa">Q7</a> below. Addresses and values were checked with gdb in QEMU (<code>-m 16M</code>).</p>
+  <p class="lead">From the moment the BIOS loads the boot sector, through <code>main()</code>, to the shell prompt <code>[/usr/root]#</code>, following this repository's source. The kernel source is Linus' original (<a href="https://www.kernel.org/pub/linux/kernel/Historic/linux-0.11.tar.gz">linux-0.11.tar.gz</a> on kernel.org) with only what gcc 4.8 and QEMU strictly need changed; <code>bootsect.s</code> and <code>setup.s</code> are identical to the original. The changes are listed in the README under "Changes from the original" and in <a href="#qa">Q7</a> below. Addresses and values were checked with gdb in QEMU (<code>-m 16M</code>).</p>
   <ul class="nav">
     <li><a href="boot-guide.html" lang="ko">한국어</a></li>
     <li><a href="#map">Overview</a></li>
@@ -586,7 +586,7 @@ Breakpoint 4, printk (fmt=0x13478 "%d/%d free blocks\n\r") at printk.c:22
 <div class="qa">
   <div class="q">Q7. Why does the original source not build as it is? What was changed?</div>
   <div class="a">
-    <p>The original targets <b>gcc 1.x</b> and a.out (1991); the build environment (Ubuntu 14.04) has only <b>gcc 4.8</b>. Nothing was changed for optimization: only what is strictly needed to build with today's compiler and run correctly. 26 files differ from the original; <code>diff -r linux-0.11-original . -x linux-0.11-original -x .git</code> shows them all.</p>
+    <p>The original targets <b>gcc 1.x</b> and a.out (1991); the build environment (Ubuntu 14.04) has only <b>gcc 4.8</b>. Nothing was changed for optimization: only what is strictly needed to build with today's compiler and run correctly. 26 files differ from the original; extract the original tarball and run <code>diff -r</code> against it to see them all.</p>
     <ul>
       <li><b>Compile errors:</b> inline asm listing an input register as clobbered (<code>impossible constraints</code> since gcc 3), a cast used as an lvalue, a bare <code>#elif</code>, <code>xorl %al,%al</code>, <code>.align 3</code> (2³ bytes in a.out, 3 bytes in ELF), <code>"r"</code> constraints on byte values (giving <code>%sil</code>).</li>
       <li><b>No error, wrong behaviour:</b> gcc 4.8 assumes "DF=0 at function boundaries" and compiles struct copies to <code>rep movsl</code>. The original leaves DF set after <code>std</code>, so fork's <code>*p = *current</code> right after <code>get_free_page()</code> copied backwards. Task 1's <code>priority</code> became 0 and the scheduler never picked init. Fixed by a <code>cld</code> at the end of the four places that use <code>std</code>.</li>
