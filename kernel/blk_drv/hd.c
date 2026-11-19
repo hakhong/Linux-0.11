@@ -37,7 +37,7 @@ inb_p(0x71); \
 static void recal_intr(void);
 
 static int recalibrate = 1;
-static int reset = 1;
+static int reset = 0;
 
 /*
  *  This struct defines the HD's and their types.
@@ -58,11 +58,13 @@ static struct hd_struct {
 	long nr_sects;
 } hd[5*MAX_HD]={{0,0},};
 
-#define port_read(port,buf,nr) \
-__asm__("cld;rep;insw"::"d" (port),"D" (buf),"c" (nr):"cx","di")
+#define port_read(port,buf,nr) do { int d0, d1; \
+__asm__ __volatile__("cld;rep;insw":"=&D" (d0),"=&c" (d1) \
+	:"d" (port),"0" (buf),"1" (nr):"memory"); } while (0)
 
-#define port_write(port,buf,nr) \
-__asm__("cld;rep;outsw"::"d" (port),"S" (buf),"c" (nr):"cx","si")
+#define port_write(port,buf,nr) do { int d0, d1; \
+__asm__ __volatile__("cld;rep;outsw":"=&S" (d0),"=&c" (d1) \
+	:"d" (port),"0" (buf),"1" (nr):"memory"); } while (0)
 
 extern void hd_interrupt(void);
 extern void rd_load(void);
@@ -162,7 +164,7 @@ static int controller_ready(void)
 {
 	int retries=10000;
 
-	while (--retries && (inb_p(HD_STATUS)&0xc0)!=0x40);
+	while (--retries && (inb_p(HD_STATUS)&0x80));
 	return (retries);
 }
 

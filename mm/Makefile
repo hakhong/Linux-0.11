@@ -1,9 +1,9 @@
-CC	=gcc
-CFLAGS	=-O -Wall -fstrength-reduce -fcombine-regs -fomit-frame-pointer \
+CC	=gcc -m32 -g -fleading-underscore -fno-builtin -fno-stack-protector
+CFLAGS	=-O -Wall -fstrength-reduce -fomit-frame-pointer \
 	-finline-functions -nostdinc -I../include
-AS	=gas
-AR	=gar
-LD	=gld
+AS	=as --32
+AR	=ar
+LD	=ld -m elf_i386
 CPP	=gcc -E -nostdinc -I../include
 
 .c.o:

@@ -185,28 +185,30 @@ __asm__("cmpl %%ecx,_current\n\t" \
 
 #define PAGE_ALIGN(n) (((n)+0xfff)&0xfffff000)
 
-#define _set_base(addr,base) \
-__asm__("movw %%dx,%0\n\t" \
+#define _set_base(addr,base) do { unsigned long __pr; \
+__asm__ __volatile__("movw %%dx,%1\n\t" \
 	"rorl $16,%%edx\n\t" \
-	"movb %%dl,%1\n\t" \
-	"movb %%dh,%2" \
-	::"m" (*((addr)+2)), \
+	"movb %%dl,%2\n\t" \
+	"movb %%dh,%3" \
+	:"=&d" (__pr) \
+	:"m" (*((addr)+2)), \
 	  "m" (*((addr)+4)), \
 	  "m" (*((addr)+7)), \
-	  "d" (base) \
-	:"dx")
+	  "0" (base) \
+	:"memory"); } while (0)
 
-#define _set_limit(addr,limit) \
-__asm__("movw %%dx,%0\n\t" \
+#define _set_limit(addr,limit) do { unsigned long __lr; \
+__asm__ __volatile__("movw %%dx,%1\n\t" \
 	"rorl $16,%%edx\n\t" \
-	"movb %1,%%dh\n\t" \
+	"movb %2,%%dh\n\t" \
 	"andb $0xf0,%%dh\n\t" \
 	"orb %%dh,%%dl\n\t" \
-	"movb %%dl,%1" \
-	::"m" (*(addr)), \
+	"movb %%dl,%2" \
+	:"=&d" (__lr) \
+	:"m" (*(addr)), \
 	  "m" (*((addr)+6)), \
-	  "d" (limit) \
-	:"dx")
+	  "0" (limit) \
+	:"memory"); } while (0)
 
 #define set_base(ldt,base) _set_base( ((char *)&(ldt)) , base )
 #define set_limit(ldt,limit) _set_limit( ((char *)&(ldt)) , (limit-1)>>12 )

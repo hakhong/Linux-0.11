@@ -1,0 +1,18 @@
+# build outputs
+*.o
+*.a
+Image
+System.map
+boot/bootsect
+boot/setup
+boot/*.lst
+tools/build
+tools/kernel
+tools/system
+output/
+
+# written by the boot-debug VSCode task
+.gdbinit
+
+Thumbs.db
+.DS_Store

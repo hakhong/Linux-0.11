@@ -6,13 +6,13 @@
 # unless it's something special (ie not a .c file).
 #
 
-AR	=gar
-AS	=gas
-LD	=gld
+AR	=ar
+AS	=as --32
+LD	=ld -m elf_i386
 LDFLAGS	=-s -x
-CC	=gcc
-CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer -fcombine-regs \
-	-finline-functions -mstring-insns -nostdinc -I../../include
+CC	=gcc -m32 -g -fleading-underscore -fno-builtin -fno-stack-protector
+CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer \
+	-finline-functions -nostdinc -I../../include
 CPP	=gcc -E -nostdinc -I../../include
 
 .c.s:
@@ -31,11 +31,13 @@ chr_drv.a: $(OBJS)
 	$(AR) rcs chr_drv.a $(OBJS)
 	sync
 
-keyboard.s: keyboard.S ../../include/linux/config.h
-	$(CPP) -traditional keyboard.S -o keyboard.s
+# keyboard.s and keyboard.S are the same file on a case-insensitive file
+# system, so feed the preprocessed source straight to the assembler.
+keyboard.o: keyboard.S ../../include/linux/config.h
+	$(CPP) -traditional keyboard.S | $(AS) -o keyboard.o
 
 clean:
-	rm -f core *.o *.a tmp_make keyboard.s
+	rm -f core *.o *.a tmp_make
 	for i in *.c;do rm -f `basename $$i .c`.s;done
 
 dep:

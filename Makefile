@@ -7,12 +7,11 @@ RAMDISK = #-DRAMDISK=512
 AS86	=as86 -0 -a
 LD86	=ld86 -0
 
-AS	=gas
-LD	=gld
-LDFLAGS	=-s -x -M
-CC	=gcc $(RAMDISK)
-CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer \
--fcombine-regs -mstring-insns
+AS	=as --32
+LD	=ld -m elf_i386
+LDFLAGS	=-Ttext 0 -e 0
+CC	=gcc -m32 -g -fleading-underscore -fno-builtin -fno-stack-protector $(RAMDISK)
+CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer
 CPP	=cpp -nostdinc -Iinclude
 
 #
@@ -20,7 +19,7 @@ CPP	=cpp -nostdinc -Iinclude
 # This can be either FLOPPY, /dev/xxxx or empty, in which case the
 # default of /dev/hd6 is used by 'build'.
 #
-ROOT_DEV=/dev/hd6
+ROOT_DEV=/dev/hd1
 
 ARCHIVES=kernel/kernel.o mm/mm.o fs/fs.o
 DRIVERS =kernel/blk_drv/blk_drv.a kernel/chr_drv/chr_drv.a
@@ -38,16 +37,31 @@ LIBS	=lib/lib.a
 
 all:	Image
 
-Image: boot/bootsect boot/setup tools/system tools/build
-	tools/build boot/bootsect boot/setup tools/system $(ROOT_DEV) > Image
+Image: boot/bootsect boot/setup tools/kernel tools/build $(ROOT_DEV)
+	tools/build boot/bootsect boot/setup tools/kernel $(ROOT_DEV) > Image
 	sync
 
 disk: Image
 	dd bs=8192 if=Image of=/dev/PS0
 
+# tools/build runs on the build host. It assumes a 32-bit host (long = 4
+# bytes) whose <linux/fs.h> had MAJOR()/MINOR().
 tools/build: tools/build.c
-	$(CC) $(CFLAGS) \
+	gcc -m32 -O -include sys/sysmacros.h -DMAJOR=major -DMINOR=minor \
 	-o tools/build tools/build.c
+
+# build stat()s the root device node to get its major/minor numbers.
+# The build container has none, so make it: /dev/hd1 = (3, 1).
+/dev/hd1:
+	mknod $@ b 3 1
+
+# build expects 'system' to be an a.out file and skips its 1024-byte
+# GCC header. tools/system is ELF (kept for gdb), so feed build the raw
+# binary behind 1024 zero bytes instead.
+tools/kernel: tools/system
+	objcopy -O binary -R .note -R .comment tools/system tools/kernel.bin
+	dd if=/dev/zero bs=1024 count=1 2>/dev/null | cat - tools/kernel.bin > tools/kernel
+	rm -f tools/kernel.bin
 
 boot/head.o: boot/head.s
 
@@ -58,7 +72,8 @@ tools/system:	boot/head.o init/main.o \
 	$(DRIVERS) \
 	$(MATH) \
 	$(LIBS) \
-	-o tools/system > System.map
+	-o tools/system
+	nm tools/system | grep -v '\(compiled\)\|\(\.o$$\)\|\( [aU] \)' | sort > System.map
 
 kernel/math/math.a:
 	(cd kernel/math; make)
@@ -82,11 +97,11 @@ lib/lib.a:
 	(cd lib; make)
 
 boot/setup: boot/setup.s
-	$(AS86) -o boot/setup.o boot/setup.s
+	$(AS86) -l boot/setup.lst -o boot/setup.o boot/setup.s
 	$(LD86) -s -o boot/setup boot/setup.o
 
 boot/bootsect:	boot/bootsect.s
-	$(AS86) -o boot/bootsect.o boot/bootsect.s
+	$(AS86) -l boot/bootsect.lst -o boot/bootsect.o boot/bootsect.s
 	$(LD86) -s -o boot/bootsect boot/bootsect.o
 
 tmp.s:	boot/bootsect.s tools/system
@@ -95,8 +110,8 @@ tmp.s:	boot/bootsect.s tools/system
 	cat boot/bootsect.s >> tmp.s
 
 clean:
-	rm -f Image System.map tmp_make core boot/bootsect boot/setup
-	rm -f init/*.o tools/system tools/build boot/*.o
+	rm -f Image System.map tmp_make core boot/bootsect boot/setup boot/*.lst
+	rm -f init/*.o tools/system tools/kernel tools/build boot/*.o
 	(cd mm;make clean)
 	(cd fs;make clean)
 	(cd kernel;make clean)
