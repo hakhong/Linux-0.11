@@ -111,6 +111,8 @@ cd Linux-0.11
 ### main (VSCode)
 F5 → `Linux 0.11 - main (QEMU + gdb)`. 빌드한 뒤 QEMU를 띄우고, `startup_32`(0x0)에서 먼저 멈춘다. 한 번 더 F5를 누르면 `main`에서 멈춘다. 이후 F10/F11을 쓸 수 있다.
 
+이 정지에서 VSCode에 "Exception has occurred" 팝업(`Hit breakpoint 3 at 0x6757.`)이 뜬다. 에러가 아니다. `startup_32`와 `main`은 `launch.json`(`postRemoteConnectCommands`)에서 `hbreak`로 건 것이고, cppdbg는 자기가 걸지 않은 브레이크포인트에서 멈추면 이를 exception으로 표시한다. 멈춘 위치와 소스 줄은 정확하고, 스텝 실행과 계속 실행도 정상으로 동작한다.
+
 ### 부트로더 (터미널 2개)
 VSCode(cppdbg)는 bootsect 구간에서 정지 상태를 "실행 중"으로 인식해 stepi가 안 된다. 그래서 WSL 터미널 2개로 직접 디버깅한다. 둘 다 저장소 루트에서 실행한다.
 

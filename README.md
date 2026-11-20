@@ -111,6 +111,8 @@ The original targets **gcc 1.x and a.out** (1991); the build environment has **g
 ### main (VSCode)
 F5 → `Linux 0.11 - main (QEMU + gdb)`. It builds, starts QEMU and stops first at `startup_32` (0x0); F5 again stops at `main`. F10/F11 work from there.
 
+VSCode shows an "Exception has occurred" popup (`Hit breakpoint 3 at 0x6757.`) at these stops. It is not an error. `startup_32` and `main` are `hbreak`s set in `launch.json` (`postRemoteConnectCommands`), and cppdbg labels a stop at a breakpoint it did not set itself as an exception. The stop position and source line are correct, and stepping and continuing work normally.
+
 ### Boot loader (two terminals)
 VSCode (cppdbg) treats a target stopped in the boot sector as "running", so stepi does not work there. Debug with two WSL terminals instead, both in the repository root.
 
