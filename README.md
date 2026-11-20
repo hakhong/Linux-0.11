@@ -114,7 +114,7 @@ F5 → `Linux 0.11 - main (QEMU + gdb)`. It builds, starts QEMU and stops first 
 VSCode shows an "Exception has occurred" popup (`Hit breakpoint 3 at 0x6757.`) at these stops. It is not an error. `startup_32` and `main` are `hbreak`s set in `launch.json` (`postRemoteConnectCommands`), and cppdbg labels a stop at a breakpoint it did not set itself as an exception. The stop position and source line are correct, and stepping and continuing work normally.
 
 ### Boot loader (two terminals)
-VSCode (cppdbg) treats a target stopped in the boot sector as "running", so stepi does not work there. Debug with two WSL terminals instead, both in the repository root.
+The usual way is two WSL terminals, both in the repository root (a VSCode alternative is described under "Commands" below).
 
 1. Build (once, or after changing the source): `./2_build.sh`. It also makes `output/bootsect.elf` and the listings `output/bootsect.lst`, `output/setup.lst`.
 2. Terminal 1: `./4_debug_qemu.sh`. QEMU waits for gdb (ready when `QEMU gdbstub ready` appears). It boots `output/Image` and attaches `output/hdc-0.11.img`, so `continue` reaches the shell.
@@ -173,7 +173,7 @@ For a TUI, type only `layout regs` (register window). Avoid `layout asm`: gdb de
 | `layout regs` | Register window (TUI) |
 | `quit` | Leave gdb (stop QEMU in terminal 1 with Ctrl+C) |
 
-The VSCode configuration `Linux 0.11 - bootsect (QEMU + gdb)` also stops at 0x7c00. But there the Debug Console fails on every command, even with the `-exec` prefix, with `Cannot evaluate expression on the specified stack frame.`, and stepping does not work. Use the two terminals for stepping.
+The VSCode configuration `Linux 0.11 - bootsect (QEMU + gdb)` also stops at 0x7c00. In its Debug Console, type gdb commands with the `-exec` prefix: `-exec si`, `-exec ni`, `-exec d16 10`, `-exec hbreak *0x9006c`, `-exec continue`. Without the prefix the console tries to evaluate an expression and fails with `Cannot evaluate expression on the specified stack frame.` The configuration loads `d16` (see `postRemoteConnectCommands`), but unlike the terminal it does not print the current instruction at every stop; run `-exec d16 1` for that.
 
 #### Skip with breakpoints instead of `si`
 A single `int 0x13` (BIOS disk read) runs tens of thousands of BIOS instructions, so `si 50000` gets nowhere. Put an `hbreak` where you want to look and `continue`. `continue` runs to the next breakpoint, or to the end (the shell) if there is none.

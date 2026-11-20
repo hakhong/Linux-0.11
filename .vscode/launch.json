@@ -77,6 +77,14 @@
           "ignoreFailures": true
         },
         {
+          "text": "cd ${workspaceFolder}",
+          "ignoreFailures": true
+        },
+        {
+          "text": "source scripts/d16.py",
+          "ignoreFailures": true
+        },
+        {
           "text": "display/i $cs*16+$pc",
           "ignoreFailures": true
         },
