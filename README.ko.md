@@ -158,6 +158,23 @@ cs:ip=9000:006c    9006c:	e8 c5 00             	call   0x90134
 
 TUI를 쓰고 싶으면 gdb 안에서 `layout regs`만 입력한다 (레지스터 창). `layout asm`은 쓰지 않는다. gdb는 16비트 코드를 32비트로 잘못 해석해서 `add BYTE PTR [eax],al` 같은 엉뚱한 명령을 보여 준다.
 
+#### 명령어 (터미널 2)
+`5_debug_gdb.sh`는 gdb를 시작할 때 이 목록을 출력한다.
+
+| 명령 | 하는 일 |
+|---|---|
+| `si` / `ni` | 명령 하나 실행 (`ni`는 `call`을 건너뛴다) |
+| `continue` (`c`) | 다음 중단점까지, 없으면 쉘까지 실행 |
+| `hbreak *0x9006c` | 선형 주소에 중단점 (아래 표 참고) |
+| `info breakpoints` / `delete N` | 중단점 목록 / N번 삭제 |
+| `d16 10` | 다음 명령 10개를 원본 소스 줄과 함께 표시 |
+| `x/10i $cs*16+$pc` | 실제 주소의 원시 디스어셈블 |
+| `info registers` / `p/x $ax` | 전체 레지스터 / 레지스터 하나 |
+| `layout regs` | 레지스터 창 (TUI) |
+| `quit` | gdb 종료 (터미널 1의 QEMU는 Ctrl+C로 끈다) |
+
+VSCode 설정 `Linux 0.11 - bootsect (QEMU + gdb)`도 0x7c00에서 멈춘다. 하지만 거기서는 Debug Console이 `-exec` 접두사를 붙여도 모든 명령에 `Cannot evaluate expression on the specified stack frame.`으로 실패하고 스텝 실행도 안 된다. 스텝 실행은 터미널 2개로 한다.
+
 #### `si` 대신 중단점으로 건너뛰기
 `int 0x13`(BIOS 디스크 읽기) 한 줄 안에서 BIOS 코드가 수만 개 실행되기 때문에 `si 50000` 같은 식으로는 진도가 안 나간다. 보고 싶은 지점에 `hbreak`를 걸고 `continue` 한다. `continue`는 다음 중단점까지 실행하고, 중단점이 없으면 끝(쉘)까지 간다.
 

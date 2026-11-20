@@ -158,6 +158,23 @@ cs:ip=9000:006c    9006c:	e8 c5 00             	call   0x90134
 
 For a TUI, type only `layout regs` (register window). Avoid `layout asm`: gdb decodes the 16-bit code as 32-bit and shows nonsense like `add BYTE PTR [eax],al`.
 
+#### Commands (terminal 2)
+`5_debug_gdb.sh` prints this list when gdb starts.
+
+| Command | What it does |
+|---|---|
+| `si` / `ni` | Run one instruction (`ni` steps over a `call`) |
+| `continue` (`c`) | Run to the next breakpoint, or to the shell if there is none |
+| `hbreak *0x9006c` | Breakpoint at a linear address (see the table below) |
+| `info breakpoints` / `delete N` | List breakpoints / remove number N |
+| `d16 10` | Show the next 10 instructions with the original source lines |
+| `x/10i $cs*16+$pc` | Raw disassembly at the real address |
+| `info registers` / `p/x $ax` | All registers / one register |
+| `layout regs` | Register window (TUI) |
+| `quit` | Leave gdb (stop QEMU in terminal 1 with Ctrl+C) |
+
+The VSCode configuration `Linux 0.11 - bootsect (QEMU + gdb)` also stops at 0x7c00. But there the Debug Console fails on every command, even with the `-exec` prefix, with `Cannot evaluate expression on the specified stack frame.`, and stepping does not work. Use the two terminals for stepping.
+
 #### Skip with breakpoints instead of `si`
 A single `int 0x13` (BIOS disk read) runs tens of thousands of BIOS instructions, so `si 50000` gets nowhere. Put an `hbreak` where you want to look and `continue`. `continue` runs to the next breakpoint, or to the end (the shell) if there is none.
 

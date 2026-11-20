@@ -8,6 +8,12 @@
       "group": "build"
     },
     {
+      "label": "build-boot",
+      "type": "shell",
+      "command": "bash ${workspaceFolder}/2_build.sh",
+      "group": "build"
+    },
+    {
       "label": "qemu-stop",
       "type": "shell",
       "command": "pkill -f '^qemu-system-i386' || true"
@@ -15,8 +21,25 @@
     {
       "label": "qemu-debug-main",
       "type": "shell",
-      "command": "bash ${workspaceFolder}/scripts/qemu-debug.sh main",
+      "command": "rm -f ${workspaceFolder}/.gdbinit && bash ${workspaceFolder}/scripts/qemu-debug.sh main",
       "dependsOn": "build-main",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^$",
+          "endsPattern": "QEMU gdbstub ready"
+        }
+      }
+    },
+    {
+      "label": "qemu-debug-boot",
+      "type": "shell",
+      "command": "cat > ${workspaceFolder}/.gdbinit << 'EOF2'\nset confirm off\nset architecture i8086\ntarget remote localhost:1234\nhbreak *0x7c00\nEOF2\nbash ${workspaceFolder}/scripts/qemu-debug.sh boot",
+      "dependsOn": "build-boot",
       "isBackground": true,
       "problemMatcher": {
         "pattern": {
