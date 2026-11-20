@@ -114,7 +114,7 @@ F5 → `Linux 0.11 - main (QEMU + gdb)`. It builds, starts QEMU and stops first 
 VSCode shows an "Exception has occurred" popup (`Hit breakpoint 3 at 0x6757.`) at these stops. It is not an error. `startup_32` and `main` are `hbreak`s set in `launch.json` (`postRemoteConnectCommands`), and cppdbg labels a stop at a breakpoint it did not set itself as an exception. The stop position and source line are correct, and stepping and continuing work normally.
 
 ### Boot loader (VSCode)
-Pick `Linux 0.11 - bootsect (QEMU + gdb)` in the Run and Debug dropdown and press F5. It builds, starts QEMU halted and stops at 0x7c00, where the BIOS runs the boot sector.
+Pick `Linux 0.11 - bootsect (QEMU + gdb)` in the Run and Debug dropdown and press F5. It builds, starts QEMU halted and stops at 0x7c00, where the BIOS runs the boot sector. On connect it resets the VM (`monitor system_reset`), so a QEMU left running from an earlier session stops there too.
 
 The Debug Console prints a list of commands and key addresses at the first stop (`bhelp`; run `-exec bhelp` to show it again). Type gdb commands there with the `-exec` prefix. Without it the console tries to evaluate an expression and fails with `Cannot evaluate expression on the specified stack frame.`
 

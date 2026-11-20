@@ -114,7 +114,7 @@ F5 → `Linux 0.11 - main (QEMU + gdb)`. 빌드한 뒤 QEMU를 띄우고, `start
 이 정지에서 VSCode에 "Exception has occurred" 팝업(`Hit breakpoint 3 at 0x6757.`)이 뜬다. 에러가 아니다. `startup_32`와 `main`은 `launch.json`(`postRemoteConnectCommands`)에서 `hbreak`로 건 것이고, cppdbg는 자기가 걸지 않은 브레이크포인트에서 멈추면 이를 exception으로 표시한다. 멈춘 위치와 소스 줄은 정확하고, 스텝 실행과 계속 실행도 정상으로 동작한다.
 
 ### 부트로더 (VSCode)
-실행 및 디버그 드롭다운에서 `Linux 0.11 - bootsect (QEMU + gdb)`를 고르고 F5를 누른다. 빌드한 뒤 QEMU를 멈춘 채로 띄우고, BIOS가 부트섹터를 실행하는 0x7c00에서 멈춘다.
+실행 및 디버그 드롭다운에서 `Linux 0.11 - bootsect (QEMU + gdb)`를 고르고 F5를 누른다. 빌드한 뒤 QEMU를 멈춘 채로 띄우고, BIOS가 부트섹터를 실행하는 0x7c00에서 멈춘다. 접속할 때 VM을 리셋하므로(`monitor system_reset`), 이전 세션에서 남아 있던 QEMU에 붙어도 거기서 멈춘다.
 
 Debug Console은 첫 정지에서 명령어와 주요 주소 목록을 출력한다(`bhelp`, 다시 보려면 `-exec bhelp`). 거기서 gdb 명령을 칠 때는 앞에 `-exec`를 붙인다. 접두사 없이 치면 콘솔이 식을 계산하려다가 `Cannot evaluate expression on the specified stack frame.`으로 실패한다.
 
