@@ -85,6 +85,14 @@
           "ignoreFailures": true
         },
         {
+          "text": "source scripts/boot-help.gdb",
+          "ignoreFailures": true
+        },
+        {
+          "text": "source scripts/boot-vscode.gdb",
+          "ignoreFailures": true
+        },
+        {
           "text": "display/i $cs*16+$pc",
           "ignoreFailures": true
         },

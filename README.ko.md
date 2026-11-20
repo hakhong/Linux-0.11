@@ -113,8 +113,25 @@ F5 → `Linux 0.11 - main (QEMU + gdb)`. 빌드한 뒤 QEMU를 띄우고, `start
 
 이 정지에서 VSCode에 "Exception has occurred" 팝업(`Hit breakpoint 3 at 0x6757.`)이 뜬다. 에러가 아니다. `startup_32`와 `main`은 `launch.json`(`postRemoteConnectCommands`)에서 `hbreak`로 건 것이고, cppdbg는 자기가 걸지 않은 브레이크포인트에서 멈추면 이를 exception으로 표시한다. 멈춘 위치와 소스 줄은 정확하고, 스텝 실행과 계속 실행도 정상으로 동작한다.
 
+### 부트로더 (VSCode)
+실행 및 디버그 드롭다운에서 `Linux 0.11 - bootsect (QEMU + gdb)`를 고르고 F5를 누른다. 빌드한 뒤 QEMU를 멈춘 채로 띄우고, BIOS가 부트섹터를 실행하는 0x7c00에서 멈춘다.
+
+Debug Console은 첫 정지에서 명령어와 주요 주소 목록을 출력한다(`bhelp`, 다시 보려면 `-exec bhelp`). 거기서 gdb 명령을 칠 때는 앞에 `-exec`를 붙인다. 접두사 없이 치면 콘솔이 식을 계산하려다가 `Cannot evaluate expression on the specified stack frame.`으로 실패한다.
+
+| Debug Console | 하는 일 |
+|---|---|
+| `-exec si` / `-exec ni` | 명령 하나 실행 (`ni`는 `call`을 건너뛴다) |
+| `-exec continue` | 다음 중단점까지, 없으면 쉘까지 실행 |
+| `-exec hbreak *0x9006c` | 선형 주소에 중단점 ("부트로더 (터미널 2개)"의 주소 표 참고) |
+| `-exec d16 10` | 다음 명령 10개를 원본 소스 줄과 함께 표시 |
+| `-exec d16 1` | 현재 명령 표시 (터미널은 멈출 때마다 자동으로 한다) |
+| `-exec info registers` | 전체 레지스터 |
+| `-exec info breakpoints` | 중단점 목록 |
+
+`d16`은 `launch.json`의 `postRemoteConnectCommands`가 불러온다. 아래 터미널 방식은 멈출 때마다 현재 명령을 자동으로 찍고 TUI 레지스터 창도 쓸 수 있어서, 부트로더를 한 줄씩 따라갈 때는 더 편하다.
+
 ### 부트로더 (터미널 2개)
-기본은 WSL 터미널 2개를 쓰는 방법이다. 둘 다 저장소 루트에서 실행한다. (VSCode로 하는 방법은 아래 "명령어"에 있다.)
+VSCode 없이 하는 방법: WSL 터미널 2개를 쓴다. 둘 다 저장소 루트에서 실행한다. VSCode로 하는 방법은 위 소절에 있다.
 
 1. 빌드 (처음 한 번 또는 소스 수정 후): `./2_build.sh`. `output/bootsect.elf`와 리스팅 `output/bootsect.lst`, `output/setup.lst`도 함께 만든다.
 2. 터미널 1: `./4_debug_qemu.sh`. QEMU가 gdb를 기다린다 (`QEMU gdbstub ready`가 나오면 준비 완료). `output/Image`로 부팅하고 `output/hdc-0.11.img`도 붙여서 `continue`로 쉘까지 갈 수 있다.
@@ -172,8 +189,6 @@ TUI를 쓰고 싶으면 gdb 안에서 `layout regs`만 입력한다 (레지스�
 | `info registers` / `p/x $ax` | 전체 레지스터 / 레지스터 하나 |
 | `layout regs` | 레지스터 창 (TUI) |
 | `quit` | gdb 종료 (터미널 1의 QEMU는 Ctrl+C로 끈다) |
-
-VSCode 설정 `Linux 0.11 - bootsect (QEMU + gdb)`도 0x7c00에서 멈춘다. 이 설정의 Debug Console에서는 gdb 명령 앞에 `-exec`를 붙인다: `-exec si`, `-exec ni`, `-exec d16 10`, `-exec hbreak *0x9006c`, `-exec continue`. 접두사 없이 치면 콘솔이 식을 계산하려다가 `Cannot evaluate expression on the specified stack frame.`으로 실패한다. 이 설정은 `d16`을 불러오지만(`postRemoteConnectCommands` 참고), 터미널과 달리 멈출 때마다 현재 명령을 자동으로 찍지는 않는다. 필요하면 `-exec d16 1`을 입력한다.
 
 #### `si` 대신 중단점으로 건너뛰기
 `int 0x13`(BIOS 디스크 읽기) 한 줄 안에서 BIOS 코드가 수만 개 실행되기 때문에 `si 50000` 같은 식으로는 진도가 안 나간다. 보고 싶은 지점에 `hbreak`를 걸고 `continue` 한다. `continue`는 다음 중단점까지 실행하고, 중단점이 없으면 끝(쉘)까지 간다.
