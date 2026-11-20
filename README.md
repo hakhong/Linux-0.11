@@ -124,11 +124,11 @@ The Debug Console prints a list of commands and key addresses at the first stop 
 | `-exec continue` | Run to the next breakpoint, or to the shell if there is none |
 | `-exec hbreak *0x9006c` | Breakpoint at a linear address (see the address table under "Boot loader (two terminals)") |
 | `-exec d16 10` | Show the next 10 instructions with the original source lines |
-| `-exec d16 1` | Show the current instruction (the terminal does this by itself at every stop) |
-| `-exec info registers` | All registers |
+| `-exec d16 1` | Show the current instruction (also printed automatically at every stop) |
+| `-exec regs` | Registers; 16-bit in real mode, 32-bit after protected mode (same rule as `d16`) |
 | `-exec info breakpoints` | List breakpoints |
 
-`d16` is loaded by `postRemoteConnectCommands` in `launch.json`. The terminal method below prints the current instruction at every stop and has the TUI register window, so it is more convenient for stepping through the boot loader.
+At every stop the Debug Console prints the current instruction with its original source line (`d16 1`) and the registers (`regs`), like the terminal. There is no source file or blue current-line marker in the editor: `bootsect.elf` is a wrapped raw binary without line information, so follow the `; bootsect.s:NN` line in the output and open `boot/bootsect.s`. `launch.json` loads `d16` and `scripts/boot-vscode.gdb` (the printing at every stop). The terminal method below also has the TUI register window.
 
 ### Boot loader (two terminals)
 Without VSCode: two WSL terminals, both in the repository root. The VSCode way is in the section above.
@@ -186,7 +186,7 @@ For a TUI, type only `layout regs` (register window). Avoid `layout asm`: gdb de
 | `info breakpoints` / `delete N` | List breakpoints / remove number N |
 | `d16 10` | Show the next 10 instructions with the original source lines |
 | `x/10i $cs*16+$pc` | Raw disassembly at the real address |
-| `info registers` / `p/x $ax` | All registers / one register |
+| `regs` | Registers, 16-bit (ax..sp, cs ds es ss, ip, flags) in real mode and 32-bit (eax.., eip, eflags) after the switch to protected mode, chosen the same way as `d16` (plain `info registers` also prints xmm/cr, dozens of lines; `info registers eax cs` picks some) |
 | `layout regs` | Register window (TUI) |
 | `quit` | Leave gdb (stop QEMU in terminal 1 with Ctrl+C) |
 
@@ -237,6 +237,54 @@ To finish: `quit` in gdb, then `Ctrl+C` in terminal 1. Kill a leftover QEMU with
 | bootsect, after moving | `0x90000 + offset` | `jmpi go,INITSEG` in `bootsect.s` |
 | setup | `0x90200 + offset` (`cs=0x9020`, `ip=offset`) | `jmpi 0,SETUPSEG` in `bootsect.s` |
 | head (`startup_32`) | `0x0` | `jmpi 0,8` in `setup.s` |
+
+### Reading the boot loader: where to start
+
+How the pieces fit:
+- The CPU starts in 16-bit real mode at `0xFFFF0`, just under 1 MB. 1 MB (`0x100000`) is the size of the real-mode address space, not an amount that is read. The BIOS reads only the first 512-byte sector of the floppy to `0x7C00`.
+- The disk layout is fixed (`tools/build.c`): sector 1 is bootsect, sectors 2-5 are setup, and the kernel (system) follows.
+- Protected mode is entered once, in `setup.s`, and never left. `move_to_user_mode` changes the privilege level (kernel to user), not the mode.
+
+| Stage | Address | Source | Mode |
+|---|---|---|---|
+| CPU reset, BIOS loads the first sector to `0x7C00` | `0xFFFF0` → `0x7C00` | ROM (no source) | 16-bit |
+| bootsect copies itself to `0x90000` and jumps | `0x7C00` → `0x90018` | `boot/bootsect.s` 47-57 (`jmpi go,INITSEG`) | 16-bit |
+| bootsect loads the 4 setup sectors to `0x90200` | `0x90018` | `bootsect.s` 57-79 (`int 0x13`) | 16-bit |
+| **bootsect loads the kernel to `0x10000`** | | `bootsect.s` 109 `call read_it` (151) | 16-bit |
+| stops the floppy motor, jumps to setup | `0x9006c` | `bootsect.s` 110-139 | 16-bit |
+| setup collects hardware data, moves the kernel to `0x0` | `0x90200` | `boot/setup.s` | 16-bit |
+| **enters protected mode** | `0x90301` / `0x90304` | `setup.s` 192-193 (`lmsw ax`, `jmpi 0,8`) | 16 → 32-bit |
+| segments, stack, IDT/GDT, paging | `0x0` | `boot/head.s` 17 (`startup_32`), 198 (`setup_paging`) | 32-bit |
+| C code | `main` | `init/main.c` 104 | 32-bit |
+
+Assembly syntax: `bootsect.s` and `setup.s` are `as86` 16-bit code (Intel operand order, `#` marks an immediate, e.g. `mov ax,#BOOTSEG`). `head.s` is `gas` 32-bit AT&T syntax (`%` before registers, source first, e.g. `movl %eax,%ebx`). The boot code needs only a few instructions: `mov`, `jmp`/`jmpi` (a jump that also loads CS), `int 0x13` (disk), `int 0x10` (screen), `rep movs` (copy), `cli`, `in`/`out` (ports), `lmsw`/`lgdt`/`lidt` (prepare protected mode).
+
+What changes in protected mode (addresses do not change, the way registers are read does):
+
+| | Real mode (16-bit) | Protected mode (32-bit) |
+|---|---|---|
+| General registers | `ax`, `bx`, ... (`regs` prints 16-bit values) | `eax`, `ebx`, ...; `ax` is the low 16 bits of `eax` |
+| Address | `cs*16 + ip`, e.g. `9000:0135` = `0x90135` | `cs` is a GDT selector (`0008`), the base is 0, so the address is `eip` |
+| `regs` output | `ax=… cs=9000 … ip=0135 flags=…` | `eax=… cs=0008 … eip=00000000 eflags=…` |
+
+Where am I? Read `cs:ip` (printed at every stop):
+
+| `cs:ip` | Location |
+|---|---|
+| `0000:7c00` ... | bootsect at its original place (before the copy) |
+| `9000:xxxx` | the copied bootsect (`go:`, `read_it`, `kill_motor`; e.g. `9000:0135` is `mov dx,#0x3f2` in `kill_motor`) |
+| `9020:xxxx` | setup |
+| `cs=0008`, `eip=…` | protected mode, `head.s` and later |
+
+Follow it into protected mode (in VSCode put `-exec` in front of each command; `-exec reg` also works as an abbreviation of `regs`):
+1. `hbreak *0x9006c`, then `continue`: the kernel has been read (it takes a few seconds).
+2. `hbreak *0x90301`, then `continue`.
+3. **Wait until the stop appears** (`Breakpoint N, …` or `Program received signal SIGTRAP`; SIGTRAP is normal for a linear-address `hbreak` in setup). A command typed while the target is still running fails or stops somewhere else.
+4. At `cs:ip=9020:0101` (`lmsw ax`), `regs` still shows 16-bit values.
+5. `si`: `0x90304` (`jmpi 0,8`). PE is already 1 but CS still holds a real-mode value, so it is shown as 16-bit.
+6. `si` again: `regs` now shows `eax=… cs=0008 … eip=00000000`. This is `startup_32` in `head.s`.
+
+For more detail see `docs/boot-guide.en.html` (the explanation of the boot) and the address tables above.
 
 ### Notes
 - In real mode the address is `cs*16 + ip`; gdb's `$pc` shows only ip. Set breakpoints at linear addresses (e.g. `hbreak *0x7c00`).

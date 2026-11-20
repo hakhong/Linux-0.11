@@ -93,19 +93,11 @@
           "ignoreFailures": true
         },
         {
-          "text": "display/i $cs*16+$pc",
-          "ignoreFailures": true
-        },
-        {
           "text": "monitor system_reset",
           "ignoreFailures": true
         },
         {
           "text": "hbreak *0x7c00",
-          "ignoreFailures": true
-        },
-        {
-          "text": "continue",
           "ignoreFailures": true
         }
       ]

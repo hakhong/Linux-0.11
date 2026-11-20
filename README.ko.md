@@ -124,11 +124,11 @@ Debug Console은 첫 정지에서 명령어와 주요 주소 목록을 출력한
 | `-exec continue` | 다음 중단점까지, 없으면 쉘까지 실행 |
 | `-exec hbreak *0x9006c` | 선형 주소에 중단점 ("부트로더 (터미널 2개)"의 주소 표 참고) |
 | `-exec d16 10` | 다음 명령 10개를 원본 소스 줄과 함께 표시 |
-| `-exec d16 1` | 현재 명령 표시 (터미널은 멈출 때마다 자동으로 한다) |
-| `-exec info registers` | 전체 레지스터 |
+| `-exec d16 1` | 현재 명령 표시 (멈출 때마다 자동으로도 출력된다) |
+| `-exec regs` | 레지스터. 리얼모드 16비트, 보호모드 전환 뒤 32비트 (`d16`과 같은 기준) |
 | `-exec info breakpoints` | 중단점 목록 |
 
-`d16`은 `launch.json`의 `postRemoteConnectCommands`가 불러온다. 아래 터미널 방식은 멈출 때마다 현재 명령을 자동으로 찍고 TUI 레지스터 창도 쓸 수 있어서, 부트로더를 한 줄씩 따라갈 때는 더 편하다.
+멈출 때마다 Debug Console에 현재 명령과 원본 소스 줄(`d16 1`), 레지스터(`regs`)가 자동으로 출력된다. 터미널과 같다. 편집기에는 소스 파일도 파란 현재 줄 표시도 없다. `bootsect.elf`는 원시 바이너리를 포장한 것이라 줄 정보가 없기 때문이다. 출력의 `; bootsect.s:NN` 줄을 보고 `boot/bootsect.s`를 열어 따라간다. `launch.json`이 `d16`과 `scripts/boot-vscode.gdb`(멈출 때마다 출력)를 불러온다. 아래 터미널 방식에는 TUI 레지스터 창도 있다.
 
 ### 부트로더 (터미널 2개)
 VSCode 없이 하는 방법: WSL 터미널 2개를 쓴다. 둘 다 저장소 루트에서 실행한다. VSCode로 하는 방법은 위 소절에 있다.
@@ -186,7 +186,7 @@ TUI를 쓰고 싶으면 gdb 안에서 `layout regs`만 입력한다 (레지스�
 | `info breakpoints` / `delete N` | 중단점 목록 / N번 삭제 |
 | `d16 10` | 다음 명령 10개를 원본 소스 줄과 함께 표시 |
 | `x/10i $cs*16+$pc` | 실제 주소의 원시 디스어셈블 |
-| `info registers` / `p/x $ax` | 전체 레지스터 / 레지스터 하나 |
+| `regs` | 레지스터. 리얼모드는 16비트(ax..sp, cs ds es ss, ip, flags), 보호모드 전환 뒤는 32비트(eax.., eip, eflags). `d16`과 같은 기준으로 고른다 (`info registers`만 치면 xmm/cr까지 수십 줄이 나온다. `info registers eax cs`로 골라 볼 수 있다) |
 | `layout regs` | 레지스터 창 (TUI) |
 | `quit` | gdb 종료 (터미널 1의 QEMU는 Ctrl+C로 끈다) |
 
@@ -237,6 +237,54 @@ TUI를 쓰고 싶으면 gdb 안에서 `layout regs`만 입력한다 (레지스�
 | bootsect, 이동 후 | `0x90000 + 오프셋` | `bootsect.s`의 `jmpi go,INITSEG` |
 | setup | `0x90200 + 오프셋` (`cs=0x9020`, `ip=오프셋`) | `bootsect.s`의 `jmpi 0,SETUPSEG` |
 | head (`startup_32`) | `0x0` | `setup.s`의 `jmpi 0,8` |
+
+### 부트로더 읽기: 어디서부터 볼까
+
+전체 흐름:
+- CPU는 16비트 리얼모드로 1MB 바로 아래인 `0xFFFF0`에서 시작한다. 1MB(`0x100000`)는 읽는 양이 아니라 리얼모드가 볼 수 있는 주소 공간의 크기다. BIOS는 플로피의 첫 섹터 512바이트만 `0x7C00`에 읽어 온다.
+- 디스크 배치는 정해져 있다(`tools/build.c`). 1번 섹터가 bootsect, 2~5번이 setup, 그 뒤가 커널(system)이다.
+- 보호모드는 `setup.s`에서 한 번 들어가고 끝까지 나오지 않는다. `move_to_user_mode`는 모드가 아니라 권한 단계(커널 → 사용자)를 바꾼다.
+
+| 단계 | 주소 | 소스 | 모드 |
+|---|---|---|---|
+| CPU 리셋, BIOS가 첫 섹터를 `0x7C00`에 읽음 | `0xFFFF0` → `0x7C00` | ROM (소스 없음) | 16비트 |
+| bootsect가 자기를 `0x90000`으로 복사하고 점프 | `0x7C00` → `0x90018` | `boot/bootsect.s` 47~57 (`jmpi go,INITSEG`) | 16비트 |
+| bootsect가 setup 4섹터를 `0x90200`에 읽음 | `0x90018` | `bootsect.s` 57~79 (`int 0x13`) | 16비트 |
+| **bootsect가 커널을 `0x10000`에 읽음** | | `bootsect.s` 109 `call read_it` (151) | 16비트 |
+| 플로피 모터를 끄고 setup으로 점프 | `0x9006c` | `bootsect.s` 110~139 | 16비트 |
+| setup이 하드웨어 정보를 모으고 커널을 `0x0`으로 옮김 | `0x90200` | `boot/setup.s` | 16비트 |
+| **보호모드 진입** | `0x90301` / `0x90304` | `setup.s` 192~193 (`lmsw ax`, `jmpi 0,8`) | 16 → 32비트 |
+| 세그먼트, 스택, IDT/GDT, 페이징 | `0x0` | `boot/head.s` 17 (`startup_32`), 198 (`setup_paging`) | 32비트 |
+| C 코드 | `main` | `init/main.c` 104 | 32비트 |
+
+어셈블리 문법: `bootsect.s`와 `setup.s`는 `as86`의 16비트 코드다(Intel 피연산자 순서, `#`은 즉시값, 예: `mov ax,#BOOTSEG`). `head.s`는 `gas`의 32비트 AT&T 문법이다(레지스터 앞에 `%`, 원본이 앞, 예: `movl %eax,%ebx`). 부트 코드에 필요한 명령은 몇 개뿐이다. `mov`, `jmp`/`jmpi`(CS도 같이 바꾸는 점프), `int 0x13`(디스크), `int 0x10`(화면), `rep movs`(복사), `cli`, `in`/`out`(포트), `lmsw`/`lgdt`/`lidt`(보호모드 준비).
+
+보호모드에서 바뀌는 것 (주소가 바뀌는 것이 아니라 레지스터를 읽는 방식이 바뀐다):
+
+| | 리얼모드 (16비트) | 보호모드 (32비트) |
+|---|---|---|
+| 범용 레지스터 | `ax`, `bx`… (`regs`가 16비트 값을 출력) | `eax`, `ebx`…. `ax`는 `eax`의 아래 16비트 |
+| 주소 | `cs*16 + ip`, 예: `9000:0135` = `0x90135` | `cs`는 GDT 셀렉터(`0008`), 베이스가 0이라 주소 = `eip` |
+| `regs` 출력 | `ax=… cs=9000 … ip=0135 flags=…` | `eax=… cs=0008 … eip=00000000 eflags=…` |
+
+지금 어디인가? 멈출 때마다 출력되는 `cs:ip`를 본다.
+
+| `cs:ip` | 위치 |
+|---|---|
+| `0000:7c00` 근처 | 복사 전 bootsect 원래 자리 |
+| `9000:xxxx` | 복사된 bootsect (`go:`, `read_it`, `kill_motor`. 예: `9000:0135`는 `kill_motor`의 `mov dx,#0x3f2`) |
+| `9020:xxxx` | setup |
+| `cs=0008`, `eip=…` | 보호모드, `head.s` 이후 |
+
+보호모드까지 따라가기 (VSCode에서는 명령 앞에 `-exec`를 붙인다. `-exec reg`도 `regs`의 줄임말로 동작한다):
+1. `hbreak *0x9006c` 후 `continue`: 커널 읽기가 끝난 지점이다(몇 초 걸린다).
+2. `hbreak *0x90301` 후 `continue`.
+3. **멈춤이 나타날 때까지 기다린다** (`Breakpoint N, …` 또는 `Program received signal SIGTRAP`. setup에서 선형 주소 `hbreak`에 걸리면 SIGTRAP으로 나오는 것이 정상이다). 타깃이 아직 실행 중일 때 입력한 명령은 실패하거나 엉뚱한 곳에서 멈춘다.
+4. `cs:ip=9020:0101`(`lmsw ax`)에서 `regs`는 아직 16비트다.
+5. `si`: `0x90304`(`jmpi 0,8`). PE는 이미 1이지만 CS가 아직 리얼모드 값이라 16비트로 표시된다.
+6. `si` 한 번 더: `regs`가 `eax=… cs=0008 … eip=00000000`으로 바뀐다. `head.s`의 `startup_32`다.
+
+더 자세한 부팅 설명은 `docs/boot-guide.html`에 있다.
 
 ### 주의
 - 리얼모드에서는 실제 주소가 `cs*16 + ip`이다. gdb의 `$pc`는 ip만 보여 준다. 브레이크포인트는 선형 주소로 건다 (예: `hbreak *0x7c00`).

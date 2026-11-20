@@ -7,8 +7,9 @@ define bhelp
   echo hbreak *0x9006c    breakpoint at a linear address\n
   echo info breakpoints   list breakpoints (delete N removes one)\n
   echo d16 10             next 10 instructions with source lines\n
-  echo d16 1              current instruction (terminal prints it at every stop)\n
-  echo info registers     all registers (p/x $ax for one)\n
+  echo d16 1              current instruction (printed automatically at every stop)\n
+  echo regs               registers: 16-bit in real mode, 32-bit (eax..) after protected mode\n
+  echo info registers eax cs   chosen registers only (plain "info registers" is long)\n
   echo bhelp              show this list again\n
   echo \n== key addresses (hbreak *ADDR; full table in README) ==\n
   echo 0x7c00   bootsect start        0x90018  go: (bootsect moved to 0x90000)\n

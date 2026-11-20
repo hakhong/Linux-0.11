@@ -151,3 +151,35 @@ CR0.PE=1 이고 CS 가 GDT 셀렉터로 바뀌었을 때 보호모드로 판별�
 
 
 D16()
+
+
+class Regs(gdb.Command):
+    """regs: 레지스터를 한눈에 본다. d16 과 같은 기준으로 모드를 고른다.
+
+리얼모드(16비트 구간)  : ax bx cx dx si di bp sp, cs ds es ss, ip, flags (16비트로 자른 값)
+보호모드(32비트 구간)  : eax..esp, cs ds es ss fs gs, eip, eflags (32비트 전체)
+`info registers` 는 xmm/cr 까지 수십 줄이 나온다."""
+
+    def __init__(self):
+        super(Regs, self).__init__("regs", gdb.COMMAND_DATA)
+
+    def invoke(self, arg, from_tty):
+        def v(name):
+            return int(gdb.parse_and_eval("$" + name)) & 0xffffffff
+
+        if _protected_mode():
+            print("eax=%08x ebx=%08x ecx=%08x edx=%08x" % (v("eax"), v("ebx"), v("ecx"), v("edx")))
+            print("esi=%08x edi=%08x ebp=%08x esp=%08x" % (v("esi"), v("edi"), v("ebp"), v("esp")))
+            print("cs=%04x ds=%04x es=%04x ss=%04x fs=%04x gs=%04x eip=%08x eflags=%08x" % (
+                v("cs") & 0xffff, v("ds") & 0xffff, v("es") & 0xffff, v("ss") & 0xffff,
+                v("fs") & 0xffff, v("gs") & 0xffff, v("eip"), v("eflags")))
+        else:
+            m = 0xffff
+            print("ax=%04x bx=%04x cx=%04x dx=%04x si=%04x di=%04x bp=%04x sp=%04x" % (
+                v("eax") & m, v("ebx") & m, v("ecx") & m, v("edx") & m,
+                v("esi") & m, v("edi") & m, v("ebp") & m, v("esp") & m))
+            print("cs=%04x ds=%04x es=%04x ss=%04x ip=%04x flags=%04x" % (
+                v("cs") & m, v("ds") & m, v("es") & m, v("ss") & m, v("eip") & m, v("eflags") & m))
+
+
+Regs()
